@@ -9,7 +9,7 @@
 
 -compile(export_all).
 -include_lib("wx/include/wx.hrl").
-
+-export([start/0]).
 
 
 start() ->

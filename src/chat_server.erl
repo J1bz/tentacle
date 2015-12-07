@@ -39,7 +39,7 @@ add_user(Socket, Users) ->
                 true ->
                     Users;
                 false ->
-                    Formatted_Name = common:format("~p:~p", [Str_Address, Port]),
+                    Formatted_Name = common:format("~s:~B", [Str_Address, Port]),
                     common:map(fun(User) -> notify_presence(Formatted_Name, User) end, Users),
                     [{Socket, Name} | Users]
             end;
@@ -92,7 +92,7 @@ user_connect(ListeningSocket) ->
     case inet:peername(Socket) of
         {ok, {Address, Port}} ->
             Str_Address = inet_parse:ntoa(Address),
-            io:format("Client connected with addr ~p and port ~p~n", [Str_Address, Port]),
+            io:format("Client connected with addr ~s and port ~B~n", [Str_Address, Port]),
             server_pid ! {connect, Socket},
             listen_user_socket(Socket);
         {error, Message} ->
@@ -103,7 +103,7 @@ listen_user_socket(Socket) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Data} ->
             server_pid ! {message, Socket, Data},
-            io:format("Received: ~p~n", [Data]),
+            io:format("Received: ~s~n", [Data]),
             listen_user_socket(Socket);
         {error, closed} ->
             io:format("Connection closed~n"),

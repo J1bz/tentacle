@@ -18,24 +18,24 @@ start_client(Address, Port) ->
                     register(client_pid, spawn(fun() -> client(Socket) end)),
                     spawn(fun() -> listen_server_notifications(Socket) end);
                 {error, Message} ->
-                    io:format("Error ~p~n", [Message])
+                    io:format("Error ~s~n", [Message])
             end;
         {error, Message} ->
-            io:format("Error ~p~n", [Message])
+            io:format("Error ~s~n", [Message])
     end.
 
 client(Socket) ->
     receive
         {send, Data} ->
-            io:format("Sending ~p~n", [Data]),
-            gen_tcp:send(Socket, common:format("Data~n~p", [Data])),
+            io:format("Sending ~s~n", [Data]),
+            gen_tcp:send(Socket, common:format("Data~n~s~n", [Data])),
             client(Socket);
         {send, Data, To} ->
-            io:format("Sending ~p to ~p~n", [Data, To]),
-            gen_tcp:send(Socket, common:format("Data~n~p~n~p", [Data, To])),
+            io:format("Sending ~s to ~s~n", [Data, To]),
+            gen_tcp:send(Socket, common:format("Data~n~s~n~s", [Data, To])),
             client(Socket);
         {received, Data} ->
-            io:format("Received ~p~n", [Data]),
+            io:format("Received ~s~n", [Data]),
             client(Socket);
         {disconnect} ->
             io:format("Disconnecting...~n"),
