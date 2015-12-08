@@ -4,6 +4,7 @@
 -define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
 
 start(Port) ->
+    io:format("new~n"),
     spawn(fun() ->
             start_server(Port),
             common:sleep(infinity)
@@ -23,12 +24,21 @@ server(Users) ->
         {disconnect, Socket} ->
             New_Users = rm_user(Socket, Users),
             server(New_Users);
-        {message, Socket, Data} ->
+        {broadcast, Socket, Data} ->
             broadcast(Socket, Data, Users),
+            server(Users);
+        {message, Socket, Data, To_Name} ->
+            case common:get_key(To_Name, Users) of
+                none ->
+                    io:format("Received a message to trasmit to ~p but it has
+not been found in the connected users~n", [To_Name]);
+                To_Socket ->
+                    message(Socket, Data, To_Socket)
+            end,
             server(Users);
         stop ->
             true
-    end. 
+    end.
 
 add_user(Socket, Users) ->
     case inet:peername(Socket) of
@@ -51,7 +61,7 @@ add_user(Socket, Users) ->
 notify_presence(Formatted_Name, User) ->
     % TODO: comment selectionner seulement le premier element d un tuple ?
     {Notified_Socket, _} = User,
-    gen_tcp:send(Notified_Socket, common:format("Presence~n~p", [Formatted_Name])).
+    gen_tcp:send(Notified_Socket, common:format("Presence~n~s~n", [Formatted_Name])).
 
 rm_user(Socket, Users) ->
     % case au cas ou le serveur a recu une mauvaise info
@@ -59,7 +69,7 @@ rm_user(Socket, Users) ->
         true ->
             Name = common:get_value(Socket, Users),
             {Ip, Port} = Name,
-            Formatted_Name = common:format("~p:~p", [Ip, Port]),
+            Formatted_Name = common:format("~s:~B", [Ip, Port]),
 
             New_Users = lists:keydelete(Socket, 1, Users),
 
@@ -71,7 +81,7 @@ rm_user(Socket, Users) ->
 
 notify_absence(Formatted_Name, User) ->
     {Notified_Socket, _} = User,
-    gen_tcp:send(Notified_Socket, common:format("Absence~n~p", [Formatted_Name])).
+    gen_tcp:send(Notified_Socket, common:format("Absence~n~s~n", [Formatted_Name])).
 
 get_sockets(Users)                   -> get_sockets(Users, []).
 get_sockets([User | Users], Sockets) ->
@@ -79,11 +89,25 @@ get_sockets([User | Users], Sockets) ->
     get_sockets(Users, [Current_Socket | Sockets]);
 get_sockets([], Sockets)             -> Sockets.
 
-broadcast(From_Socket, Data, Users) ->
+message(From_Socket, Data, To) ->
+    case common:socket_to_string(From_Socket) of
+        {ok, From_Socket_String} ->
+            gen_tcp:send(To, common:format("Data~n~s~n~s~n", [Data, From_Socket_String]));
+        {error, _} ->
+            io:format("Wanted to send ~p from ~p to ~p but an error occured during ~p string formattng", [Data, From_Socket, To, From_Socket])
+    end.
+
+broadcast(From_Socket, Content, Users) ->
     Sockets = get_sockets(Users),
-    common:map_except(fun(Socket) ->
-                gen_tcp:send(Socket, Data)
-               end, Sockets, From_Socket).
+    case common:socket_to_string(From_Socket) of
+        {ok, From_Socket_String} ->
+            Data = common:format("Data~n~s~n~s~n", [Content, From_Socket_String]),
+            common:map_except(fun(Socket) ->
+                        gen_tcp:send(Socket, Data)
+                       end, Sockets, From_Socket);
+        {error, _} ->
+            io:format("Wanted to send ~p from ~p but an error occured while its socket was formatted to string", [Content, From_Socket])
+    end.
 
 user_connect(ListeningSocket) ->
     {ok, Socket} = gen_tcp:accept(ListeningSocket),
@@ -99,11 +123,49 @@ user_connect(ListeningSocket) ->
             io:format("Error: ~p~n", [Message])
     end.
 
+parse_name(Name) ->
+    Splitted_Name = string:tokens(Name, ":\""),
+    case length(Splitted_Name) of
+        2 ->
+            [Str_Address | [Str_Port]] = Splitted_Name,
+            case inet_parse:address(Str_Address) of
+                {ok, _} ->
+                    %TODO: si le port n'est pas un entier
+                    Port = list_to_integer(Str_Port),
+                    {ok, {Str_Address, Port}};
+                {error, _} ->
+                    Reason = common:format("Received ~s as name but ~s address is not valid", [Name, Str_Address]),
+                    {error, Reason}
+                    end;
+        _ ->
+            Reason = common:format("Received ~s as name but a name should have only one ':'", [Name]),
+            {error, Reason}
+    end.
+
 listen_user_socket(Socket) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Data} ->
-            server_pid ! {message, Socket, Data},
-            io:format("Received: ~s~n", [Data]),
+            Slitted_Data = string:tokens(binary_to_list(Data), "\n"),
+            [Header | Message] = Slitted_Data,
+            case Header of
+                "Data" ->
+                    case length(Slitted_Data) of
+                        2 ->
+                            server_pid ! {broadcast, Socket, Message};
+                        3 ->
+                            [Content | [To]] = Message,
+                            case parse_name(To) of
+                                {ok, {Address, Port}} ->
+                                    server_pid ! {message, Socket, Content, {Address, Port}};
+                                {error, Message} ->
+                                    io:format("Error ~p~n", [Message])
+                            end;
+                        _ ->
+                            io:format("Received an unknown message ~p~n", [Data])
+                    end;
+                _ ->
+                    io:format("Reveiced an unknown message ~p~n", [Data])
+            end,
             listen_user_socket(Socket);
         {error, closed} ->
             io:format("Connection closed~n"),

@@ -27,15 +27,18 @@ start_client(Address, Port) ->
 client(Socket) ->
     receive
         {send, Data} ->
-            io:format("Sending ~s~n", [Data]),
+            %io:format("Sending ~s~n", [Data]),
+            print_send(Data),
             gen_tcp:send(Socket, common:format("Data~n~s~n", [Data])),
             client(Socket);
         {send, Data, To} ->
-            io:format("Sending ~s to ~s~n", [Data, To]),
-            gen_tcp:send(Socket, common:format("Data~n~s~n~s", [Data, To])),
+            %io:format("Sending ~p to ~p~n", [Data, To]),
+            print_send_to(Data, To),
+            gen_tcp:send(Socket, common:format("Data~n~s~n~s~n", [Data, To])),
             client(Socket);
         {received, Data} ->
-            io:format("Received ~s~n", [Data]),
+            %io:format("Received: ~s~n", [Data]),
+            handle_received(Data),
             client(Socket);
         {disconnect} ->
             io:format("Disconnecting...~n"),
@@ -43,6 +46,34 @@ client(Socket) ->
         stop ->
             true
     end.
+
+print_send(Data) ->
+    io:format("Me: ~s~n", [Data]).
+
+print_send_to(Data, To) ->
+    io:format("Me to ~s: ~s~n", [To, Data]).
+
+handle_received(Data) ->
+    Splitted_Data = string:tokens(binary_to_list(Data), "\n"),
+    [Header | Message] = Splitted_Data,
+    case Header of
+        "Data" ->
+            print_data(Message);
+        "Presence" ->
+            print_presence([Message]);
+        "Absence" ->
+            print_absence([Message])
+    end.
+
+print_data(Message) ->
+    [Content | [From]] = Message,
+    io:format("~s: ~s~n", [From, Content]).
+
+print_presence(Socket_Name) ->
+    io:format("~s joined server~n", [Socket_Name]).
+
+print_absence(Socket_Name) ->
+    io:format("~s left server~n", [Socket_Name]).
 
 send(Data) ->
     client_pid ! {send, Data},
