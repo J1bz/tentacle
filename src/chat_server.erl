@@ -39,24 +39,28 @@ server(Users) ->
             true
     end.
 
-add_user(Socket, Users) ->
-    case common:socket_to_name(Socket) of
-        {ok, Name} ->
-            case lists:keymember(Name, 2, Users) of
+add_user(Connecting_Socket, Connected_Users) ->
+    case common:socket_to_name(Connecting_Socket) of
+        {ok, Connecting_Name} ->
+            case lists:keymember(Connecting_Name, 2, Connected_Users) of
                 true ->
-                    Users;
+                    Connected_Users;
                 false ->
-                    common:map(fun(User) -> notify_presence(Name, User) end, Users),
-                    [{Socket, Name} | Users]
+                    common:map(fun(Connected_User) ->
+                                {Connected_Socket, Connected_Name} = Connected_User,
+                                notify_presence(Connecting_Name, Connected_Socket),
+                                notify_presence(Connected_Name, Connecting_Socket)
+                               end,
+                               Connected_Users
+                    ),
+                    [{Connecting_Socket, Connecting_Name} | Connected_Users]
             end;
         {error, Error} ->
             io:format("Error ~p~n", [Error])
     end.
 
-notify_presence(Name, User) ->
-    % TODO: comment selectionner seulement le premier element d un tuple ?
-    {Notified_Socket, _} = User,
-    gen_tcp:send(Notified_Socket, common:format("Presence~n~s~n", [Name])).
+notify_presence(Name, Socket) ->
+    gen_tcp:send(Socket, common:format("Presence~n~s~n", [Name])).
 
 rm_user(Socket, Users) ->
     % case au cas ou le serveur a recu une mauvaise info
