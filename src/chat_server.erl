@@ -24,16 +24,15 @@ server(Users) ->
         {disconnect, Socket} ->
             New_Users = rm_user(Socket, Users),
             server(New_Users);
-        {broadcast, Socket, Data} ->
-            broadcast(Socket, Data, Users),
+        {broadcast, Socket, Frame} ->
+            broadcast(Socket, Frame, Users),
             server(Users);
-        {message, Socket, Data, To_Name} ->
+        {message, Socket, Frame, To_Name} ->
             case common:get_key(To_Name, Users) of
                 none ->
-                    io:format("Received a message to trasmit to ~p but it has
-not been found in the connected users~n", [To_Name]);
+                    io:format("Received a message to trasmit to ~p but it has not been found in the connected users~n", [To_Name]);
                 To_Socket ->
-                    message(Socket, Data, To_Socket)
+                    message(Socket, Frame, To_Socket)
             end,
             server(Users);
         stop ->
@@ -41,27 +40,28 @@ not been found in the connected users~n", [To_Name]);
     end.
 
 add_user(Socket, Users) ->
-    case inet:peername(Socket) of
-        {ok, {Address, Port}} ->
-            Str_Address = inet_parse:ntoa(Address),
-            Name = {Str_Address, Port},
+    case common:socket_to_name(Socket) of
+        {ok, Name} ->
             case lists:keymember(Name, 2, Users) of
                 true ->
                     Users;
                 false ->
-                    Formatted_Name = common:format("~s:~B", [Str_Address, Port]),
-                    common:map(fun(User) -> notify_presence(Formatted_Name, User) end, Users),
-                    [{Socket, Name} | Users]
+                    case common:socket_to_string(Socket) of
+                        {ok, Socket_String} ->
+                            common:map(fun(User) -> notify_presence(Socket_String, User) end, Users),
+                            [{Socket, Name} | Users];
+                        {error, Error} ->
+                            io:format("Error: ~p~n", [Error])
+                    end
             end;
-
-        {error, Message} ->
-            io:format("Error ~p~n", [Message])
+        {error, Error} ->
+            io:format("Error ~p~n", [Error])
     end.
 
-notify_presence(Formatted_Name, User) ->
+notify_presence(Socket_String, User) ->
     % TODO: comment selectionner seulement le premier element d un tuple ?
     {Notified_Socket, _} = User,
-    gen_tcp:send(Notified_Socket, common:format("Presence~n~s~n", [Formatted_Name])).
+    gen_tcp:send(Notified_Socket, common:format("Presence~n~s~n", [Socket_String])).
 
 rm_user(Socket, Users) ->
     % case au cas ou le serveur a recu une mauvaise info
@@ -70,8 +70,8 @@ rm_user(Socket, Users) ->
             % ce serait bien d'utiliser une fonction de common, mais comme à ce
             % moment le socket n'est plus valide on ne peut pas l'utiliser
             Name = common:get_value(Socket, Users),
-            {Ip, Port} = Name,
-            Socket_String = common:format("~s:~B", [Ip, Port]),
+            {Str_Address, Port} = Name,
+            Socket_String = common:format("~s:~B", [Str_Address, Port]),
 
             New_Users = lists:keydelete(Socket, 1, Users),
             common:map(fun(User) -> notify_absence(Socket_String, User) end, New_Users),
@@ -90,24 +90,24 @@ get_sockets([User | Users], Sockets) ->
     get_sockets(Users, [Current_Socket | Sockets]);
 get_sockets([], Sockets)             -> Sockets.
 
-message(From_Socket, Data, To) ->
+message(From_Socket, Message, To_Socket) ->
     case common:socket_to_string(From_Socket) of
         {ok, From_Socket_String} ->
-            gen_tcp:send(To, common:format("Data~n~s~n~s~n", [Data, From_Socket_String]));
+            gen_tcp:send(To_Socket, common:format("Data~n~s~n~s~n", [Message, From_Socket_String]));
         {error, _} ->
-            io:format("Wanted to send ~p from ~p to ~p but an error occured during ~p string formattng", [Data, From_Socket, To, From_Socket])
+            io:format("Wanted to send ~p from ~p to ~p but an error occured during ~p string formattng", [Message, From_Socket, To_Socket, From_Socket])
     end.
 
-broadcast(From_Socket, Content, Users) ->
+broadcast(From_Socket, Message, Users) ->
     Sockets = get_sockets(Users),
     case common:socket_to_string(From_Socket) of
         {ok, From_Socket_String} ->
-            Data = common:format("Data~n~s~n~s~n", [Content, From_Socket_String]),
+            Frame = common:format("Data~n~s~n~s~n", [Message, From_Socket_String]),
             common:map_except(fun(Socket) ->
-                        gen_tcp:send(Socket, Data)
+                        gen_tcp:send(Socket, Frame)
                        end, Sockets, From_Socket);
         {error, _} ->
-            io:format("Wanted to send ~p from ~p but an error occured while its socket was formatted to string", [Content, From_Socket])
+            io:format("Wanted to send ~p from ~p but an error occured while its socket was formatted to string", [Message, From_Socket])
     end.
 
 user_connect(ListeningSocket) ->
@@ -119,33 +119,25 @@ user_connect(ListeningSocket) ->
             io:format("Client connected with addr ~s and port ~B~n", [Str_Address, Port]),
             server_pid ! {connect, Socket},
             listen_user_socket(Socket);
-        {error, Message} ->
-            io:format("Error: ~p~n", [Message])
+        {error, Error} ->
+            io:format("Error: ~p~n", [Error])
     end.
 
 listen_user_socket(Socket) ->
     case gen_tcp:recv(Socket, 0) of
-        {ok, Data} ->
-            Slitted_Data = string:tokens(binary_to_list(Data), "\n"),
-            [Header | Message] = Slitted_Data,
-            case Header of
-                "Data" ->
-                    case length(Slitted_Data) of
-                        2 ->
-                            server_pid ! {broadcast, Socket, Message};
-                        3 ->
-                            [Content | [To]] = Message,
-                            case common:socket_string_to_name(To) of
-                                {ok, {Address, Port}} ->
-                                    server_pid ! {message, Socket, Content, {Address, Port}};
-                                {error, Message} ->
-                                    io:format("Error ~p~n", [Message])
-                            end;
-                        _ ->
-                            io:format("Received an unknown message ~p~n", [Data])
-                    end;
-                _ ->
-                    io:format("Reveiced an unknown message ~p~n", [Data])
+        {ok, Frame} ->
+            case common:parse_frame(Frame) of
+                {data, {Message}} ->
+                    server_pid ! {broadcast, Socket, Message};
+                {data, {To, Message}} ->
+                    case common:socket_string_to_name(To) of
+                        {ok, {Address, Port}} ->
+                            server_pid ! {message, Socket, Message, {Address, Port}};
+                        {error, Error} ->
+                            io:format("Error ~p~n", [Error])
+                    end
+                    %server_pid ! {message, Socket, Content, From};
+                %TODO: gérer les autres cas
             end,
             listen_user_socket(Socket);
         {error, closed} ->

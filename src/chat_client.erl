@@ -9,33 +9,33 @@ start(Address, Port) ->
             common:sleep(infinity)
           end).
 
-start_client(Address, Port) ->
-    case inet:parse_address(Address) of
+start_client(Str_Address, Port) ->
+    case inet:parse_address(Str_Address) of
         {ok, Parsed_Address} ->
             case gen_tcp:connect(Parsed_Address, Port, ?TCP_OPTIONS, 10) of
                 {ok, Socket} ->
                     io:format("Connection established~n"),
                     register(client_pid, spawn(fun() -> client(Socket) end)),
                     spawn(fun() -> listen_server_notifications(Socket) end);
-                {error, Message} ->
-                    io:format("Error ~s~n", [Message])
+                {error, Error} ->
+                    io:format("Error ~s~n", [Error])
             end;
-        {error, Message} ->
-            io:format("Error ~s~n", [Message])
+        {error, Error} ->
+            io:format("Error ~s~n", [Error])
     end.
 
 client(Socket) ->
     receive
-        {send, Data} ->
-            print_send(Data),
-            gen_tcp:send(Socket, common:format("Data~n~s~n", [Data])),
+        {send, Message} ->
+            print_send(Message),
+            gen_tcp:send(Socket, common:format("Data~n~s~n", [Message])),
             client(Socket);
-        {send, Data, To} ->
-            print_send_to(Data, To),
-            gen_tcp:send(Socket, common:format("Data~n~s~n~s~n", [Data, To])),
+        {send, Message, To_String} ->
+            print_send_to(Message, To_String),
+            gen_tcp:send(Socket, common:format("Data~n~s~n~s~n", [Message, To_String])),
             client(Socket);
-        {received, Data} ->
-            handle_received(Data),
+        {received, Frame} ->
+            handle_received(Frame),
             client(Socket);
         {disconnect} ->
             io:format("Disconnecting...~n"),
@@ -44,16 +44,16 @@ client(Socket) ->
             true
     end.
 
-print_send(Data) ->
-    io:format("Me: ~s~n", [Data]).
+print_send(Message) ->
+    io:format("Me: ~s~n", [Message]).
 
-print_send_to(Data, To) ->
-    io:format("Me to ~s: ~s~n", [To, Data]).
+print_send_to(Message, To_String) ->
+    io:format("Me to ~s: ~s~n", [To_String, Message]).
 
-handle_received(Data) ->
-    case common:parse_frame(Data) of
-        {data, {From, Message}} ->
-            print_data(From, Message);
+handle_received(Frame) ->
+    case common:parse_frame(Frame) of
+        {data, {From_String, Message}} ->
+            print_data(From_String, Message);
         {presence, Socket_String} ->
             print_presence(Socket_String);
         {absence, Socket_String} ->
@@ -61,8 +61,8 @@ handle_received(Data) ->
         %TODO: le cas ou aucun des trois n'est recu
     end.
 
-print_data(From, Message) ->
-    io:format("~s: ~s~n", [From, Message]).
+print_data(From_String, Message) ->
+    io:format("~s: ~s~n", [From_String, Message]).
 
 print_presence(Socket_String) ->
     io:format("~s joined server~n", [Socket_String]).
@@ -70,12 +70,12 @@ print_presence(Socket_String) ->
 print_absence(Socket_String) ->
     io:format("~s left server~n", [Socket_String]).
 
-send(Data) ->
-    client_pid ! {send, Data},
+send(Message) ->
+    client_pid ! {send, Message},
     ok.
 
-send(Data, To) ->
-    client_pid ! {send, Data, To},
+send(Message, To_String) ->
+    client_pid ! {send, Message, To_String},
     ok.
 
 disconnect() ->
@@ -84,8 +84,8 @@ disconnect() ->
 
 listen_server_notifications(Socket) ->
     case gen_tcp:recv(Socket, 0) of
-        {ok, Data} ->
-            client_pid ! {received, Data},
+        {ok, Frame} ->
+            client_pid ! {received, Frame},
             listen_server_notifications(Socket);
         {error, closed} ->
             io:format("Connection lost~n"),
