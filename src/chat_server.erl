@@ -1,7 +1,10 @@
 -module(chat_server).
 -export([start/1]).
 
--define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
+-define(TCP_OPTIONS, [binary,
+                      {packet, 0},
+                      {active, false},
+                      {reuseaddr, true}]).
 
 start(Port) ->
     spawn(fun() ->
@@ -29,7 +32,9 @@ server(Users) ->
         {message, Socket, Frame, To_Name} ->
             case common:get_key(To_Name, Users) of
                 none ->
-                    io:format("Received a message to trasmit to ~p but it has not been found in the connected users~n", [To_Name]);
+                    io:format("Received a message to trasmit to ~p but it has "
+                              "not been found in the connected users~n",
+                              [To_Name]);
                 To_Socket ->
                     message(Socket, Frame, To_Socket)
             end,
@@ -46,9 +51,12 @@ add_user(Connecting_Socket, Connected_Users) ->
                     Connected_Users;
                 false ->
                     common:map(fun(Connected_User) ->
-                                {Connected_Socket, Connected_Name} = Connected_User,
-                                notify_presence(Connecting_Name, Connected_Socket),
-                                notify_presence(Connected_Name, Connecting_Socket)
+                                {Connected_Socket, Connected_Name} =
+                                        Connected_User,
+                                notify_presence(Connecting_Name,
+                                                Connected_Socket),
+                                notify_presence(Connected_Name,
+                                                Connecting_Socket)
                                end,
                                Connected_Users
                     ),
@@ -65,8 +73,8 @@ rm_user(Socket, Users) ->
     % case au cas ou le serveur a recu une mauvaise info
     case lists:keymember(Socket, 1, Users) of
         true ->
-            % ce serait bien d'utiliser une fonction de common, mais comme à ce
-            % moment le socket n'est plus valide on ne peut pas l'utiliser
+            % ce serait bien d'utiliser une fonction de common, mais comme à
+            % ce moment le socket n'est plus valide on ne peut pas l'utiliser
             Name = common:get_value(Socket, Users),
 
             New_Users = lists:keydelete(Socket, 1, Users),
@@ -78,7 +86,8 @@ rm_user(Socket, Users) ->
 
 notify_absence(Formatted_Name, User) ->
     {Notified_Socket, _} = User,
-    gen_tcp:send(Notified_Socket, common:format("Absence~n~s~n", [Formatted_Name])).
+    gen_tcp:send(Notified_Socket, common:format("Absence~n~s~n",
+                                                [Formatted_Name])).
 
 get_sockets(Users)                   -> get_sockets(Users, []).
 get_sockets([User | Users], Sockets) ->
@@ -89,9 +98,12 @@ get_sockets([], Sockets)             -> Sockets.
 message(From_Socket, Message, To_Socket) ->
     case common:socket_to_name(From_Socket) of
         {ok, From_Name} ->
-            gen_tcp:send(To_Socket, common:format("Data~n~s~n~s~n", [Message, From_Name]));
+            gen_tcp:send(To_Socket, common:format("Data~n~s~n~s~n",
+                                                  [Message, From_Name]));
         {error, _} ->
-            io:format("Wanted to send ~p from ~p to ~p but an error occured during ~p string formattng", [Message, From_Socket, To_Socket, From_Socket])
+            io:format("Wanted to send ~p from ~p to ~p but an error occured "
+                      "during ~p string formattng",
+                      [Message, From_Socket, To_Socket, From_Socket])
     end.
 
 broadcast(From_Socket, Message, Users) ->
@@ -103,7 +115,9 @@ broadcast(From_Socket, Message, Users) ->
                         gen_tcp:send(Socket, Frame)
                        end, Sockets, From_Socket);
         {error, _} ->
-            io:format("Wanted to send ~p from ~p but an error occured while its socket was formatted to string", [Message, From_Socket])
+            io:format("Wanted to send ~p from ~p but an error occured while "
+                      "its socket was formatted to string",
+                      [Message, From_Socket])
     end.
 
 user_connect(ListeningSocket) ->

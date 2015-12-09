@@ -1,7 +1,10 @@
 -module(chat_client).
 -export([start/2, send/1, send/2, disconnect/0]).
 
--define(TCP_OPTIONS, [binary, {packet, 0}, {active, false}, {reuseaddr, true}]).
+-define(TCP_OPTIONS, [binary,
+                      {packet, 0},
+                      {active, false},
+                      {reuseaddr, true}]).
 
 start(Address, Port) ->
     spawn(fun() ->
@@ -32,7 +35,8 @@ client(Socket) ->
             client(Socket);
         {send, Message, To_String} ->
             print_send_to(Message, To_String),
-            gen_tcp:send(Socket, common:format("Data~n~s~n~s~n", [Message, To_String])),
+            gen_tcp:send(Socket, common:format("Data~n~s~n~s~n",
+                                               [Message, To_String])),
             client(Socket);
         {received, Frame} ->
             handle_received(Frame),
