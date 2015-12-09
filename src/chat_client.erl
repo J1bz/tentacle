@@ -12,7 +12,7 @@ start(Address, Port) ->
 start_client(Str_Address, Port) ->
     case inet:parse_address(Str_Address) of
         {ok, Parsed_Address} ->
-            case gen_tcp:connect(Parsed_Address, Port, ?TCP_OPTIONS, 10) of
+            case gen_tcp:connect(Parsed_Address, Port, ?TCP_OPTIONS, 5000) of
                 {ok, Socket} ->
                     io:format("Connection established~n"),
                     register(client_pid, spawn(fun() -> client(Socket) end)),
