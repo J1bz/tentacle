@@ -1,6 +1,6 @@
 -module(common).
 
--export([sleep/1, map/2, map_except/3, format/2, socket_to_name/1, socket_to_string/1, socket_string_to_name/1, parse_frame/1, get_value/2, get_key/2]).
+-export([sleep/1, map/2, map_except/3, format/2, socket_to_name/1, parse_frame/1, get_value/2, get_key/2]).
 
 sleep(T) ->
     receive
@@ -27,37 +27,9 @@ socket_to_name(Socket) ->
     case inet:peername(Socket) of
         {ok, {Address, Port}} ->
             Str_Address = inet_parse:ntoa(Address),
-            {ok, {Str_Address, Port}};
-        {error, Error} ->
-            {error, Error}
-    end.
-
-socket_to_string(Socket) ->
-    case socket_to_name(Socket) of
-        {ok, {Str_Address, Port}} ->
             Socket_String = format("~s:~B", [Str_Address, Port]),
             {ok, Socket_String};
         {error, Error} ->
-            {error, Error}
-    end.
-
-socket_string_to_name(Socket_String) ->
-    %TODO: ne plus avoir à parser en fonction de '\"'
-    Splitted_String = string:tokens(Socket_String, ":\""),
-    case length(Splitted_String) of
-        2 ->
-            [Str_Address | [Str_Port]] = Splitted_String,
-            case inet_parse:address(Str_Address) of
-                {ok, _} ->
-                    %TODO: si le port n'est pas un entier
-                    Port = list_to_integer(Str_Port),
-                    {ok, {Str_Address, Port}};
-                {error, _} ->
-                    Error = common:format("Received ~s as name but ~s address is not valid", [Socket_String, Str_Address]),
-                    {error, Error}
-                    end;
-        _ ->
-            Error = common:format("Received ~s as name but a name should have only one ':'", [Socket_String]),
             {error, Error}
     end.
 
@@ -71,12 +43,6 @@ parse_frame(Frame) ->
                     [Message] = Content,
                     {data, {Message}};
                 2 ->
-                    % case common:socket_string_to_name(To) of
-                    %     {ok, {Address, Port}} ->
-                    %         server_pid ! {message, Socket, Content, {Address, Port}};
-                    %     {error, Message} ->
-                    %         io:format("Error ~p~n", [Message])
-                    % end;
                     [Message | [Socket_String]] = Content,
                     {data, {Socket_String, Message}}
             end;

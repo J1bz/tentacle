@@ -46,22 +46,17 @@ add_user(Socket, Users) ->
                 true ->
                     Users;
                 false ->
-                    case common:socket_to_string(Socket) of
-                        {ok, Socket_String} ->
-                            common:map(fun(User) -> notify_presence(Socket_String, User) end, Users),
-                            [{Socket, Name} | Users];
-                        {error, Error} ->
-                            io:format("Error: ~p~n", [Error])
-                    end
+                    common:map(fun(User) -> notify_presence(Name, User) end, Users),
+                    [{Socket, Name} | Users]
             end;
         {error, Error} ->
             io:format("Error ~p~n", [Error])
     end.
 
-notify_presence(Socket_String, User) ->
+notify_presence(Name, User) ->
     % TODO: comment selectionner seulement le premier element d un tuple ?
     {Notified_Socket, _} = User,
-    gen_tcp:send(Notified_Socket, common:format("Presence~n~s~n", [Socket_String])).
+    gen_tcp:send(Notified_Socket, common:format("Presence~n~s~n", [Name])).
 
 rm_user(Socket, Users) ->
     % case au cas ou le serveur a recu une mauvaise info
@@ -70,11 +65,9 @@ rm_user(Socket, Users) ->
             % ce serait bien d'utiliser une fonction de common, mais comme à ce
             % moment le socket n'est plus valide on ne peut pas l'utiliser
             Name = common:get_value(Socket, Users),
-            {Str_Address, Port} = Name,
-            Socket_String = common:format("~s:~B", [Str_Address, Port]),
 
             New_Users = lists:keydelete(Socket, 1, Users),
-            common:map(fun(User) -> notify_absence(Socket_String, User) end, New_Users),
+            common:map(fun(User) -> notify_absence(Name, User) end, New_Users),
             New_Users;
         false ->
             Users
@@ -91,18 +84,18 @@ get_sockets([User | Users], Sockets) ->
 get_sockets([], Sockets)             -> Sockets.
 
 message(From_Socket, Message, To_Socket) ->
-    case common:socket_to_string(From_Socket) of
-        {ok, From_Socket_String} ->
-            gen_tcp:send(To_Socket, common:format("Data~n~s~n~s~n", [Message, From_Socket_String]));
+    case common:socket_to_name(From_Socket) of
+        {ok, From_Name} ->
+            gen_tcp:send(To_Socket, common:format("Data~n~s~n~s~n", [Message, From_Name]));
         {error, _} ->
             io:format("Wanted to send ~p from ~p to ~p but an error occured during ~p string formattng", [Message, From_Socket, To_Socket, From_Socket])
     end.
 
 broadcast(From_Socket, Message, Users) ->
     Sockets = get_sockets(Users),
-    case common:socket_to_string(From_Socket) of
-        {ok, From_Socket_String} ->
-            Frame = common:format("Data~n~s~n~s~n", [Message, From_Socket_String]),
+    case common:socket_to_name(From_Socket) of
+        {ok, From_Name} ->
+            Frame = common:format("Data~n~s~n~s~n", [Message, From_Name]),
             common:map_except(fun(Socket) ->
                         gen_tcp:send(Socket, Frame)
                        end, Sockets, From_Socket);
@@ -115,8 +108,8 @@ user_connect(ListeningSocket) ->
     spawn(fun() -> user_connect(ListeningSocket) end),
 
     case common:socket_to_name(Socket) of
-        {ok, {Str_Address, Port}} ->
-            io:format("Client connected with addr ~s and port ~B~n", [Str_Address, Port]),
+        {ok, Name} ->
+            io:format("Client ~s connected~n", [Name]),
             server_pid ! {connect, Socket},
             listen_user_socket(Socket);
         {error, Error} ->
@@ -129,14 +122,8 @@ listen_user_socket(Socket) ->
             case common:parse_frame(Frame) of
                 {data, {Message}} ->
                     server_pid ! {broadcast, Socket, Message};
-                {data, {To, Message}} ->
-                    case common:socket_string_to_name(To) of
-                        {ok, {Address, Port}} ->
-                            server_pid ! {message, Socket, Message, {Address, Port}};
-                        {error, Error} ->
-                            io:format("Error ~p~n", [Error])
-                    end
-                    %server_pid ! {message, Socket, Content, From};
+                {data, {To_String, Message}} ->
+                    server_pid ! {message, Socket, Message, To_String}
                 %TODO: gérer les autres cas
             end,
             listen_user_socket(Socket);
