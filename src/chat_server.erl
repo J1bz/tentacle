@@ -73,8 +73,6 @@ rm_user(Socket, Users) ->
     % case au cas ou le serveur a recu une mauvaise info
     case lists:keymember(Socket, 1, Users) of
         true ->
-            % ce serait bien d'utiliser une fonction de common, mais comme à
-            % ce moment le socket n'est plus valide on ne peut pas l'utiliser
             Name = common:get_value(Socket, Users),
 
             New_Users = lists:keydelete(Socket, 1, Users),
@@ -140,8 +138,17 @@ listen_user_socket(Socket) ->
                 {data, {Message}} ->
                     server_pid ! {broadcast, Socket, Message};
                 {data, {To_String, Message}} ->
-                    server_pid ! {message, Socket, Message, To_String}
-                %TODO: gérer les autres cas
+                    server_pid ! {message, Socket, Message, To_String};
+                {presence, Socket_String} ->
+                    io:format("Received a presence from ~s, but server is not "
+                              "supposed to receive this frame... ignoring~n",
+                              [Socket_String]);
+                {absence, Socket_String} ->
+                    io:format("Received an absence from ~s, but server is not "
+                              "supposed to receive this frame... ignoring~n",
+                              [Socket_String]);
+                {unkown, Frame} ->
+                    io:format("Received an unkown frame: ~s~n", [Frame])
             end,
             listen_user_socket(Socket);
         {error, closed} ->

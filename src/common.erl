@@ -56,8 +56,9 @@ parse_frame(Frame) ->
             {presence, Socket_String};
         "Absence" ->
             Socket_String = [Content],
-            {absence, Socket_String}
-        %TODO: le cas ou aucun des trois n'est en jeu
+            {absence, Socket_String};
+        _ ->
+            {unknown, Frame}
     end.
 
 get_value(_, []) ->

@@ -63,8 +63,9 @@ handle_received(Frame) ->
         {presence, Socket_String} ->
             print_presence(Socket_String);
         {absence, Socket_String} ->
-            print_absence(Socket_String)
-        %TODO: le cas ou aucun des trois n'est recu
+            print_absence(Socket_String);
+        {unknown, Frame} ->
+            ok
     end.
 
 print_data(From_String, Message) ->
