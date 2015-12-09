@@ -49,7 +49,9 @@ parse_frame(Frame) ->
                     {data, {Message}};
                 2 ->
                     [Message | [Socket_String]] = Content,
-                    {data, {Socket_String, Message}}
+                    {data, {Socket_String, Message}};
+                _ ->
+                    {unknown, Frame}
             end;
         "Presence" ->
             Socket_String = [Content],
