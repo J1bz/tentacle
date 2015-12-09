@@ -67,13 +67,14 @@ rm_user(Socket, Users) ->
     % case au cas ou le serveur a recu une mauvaise info
     case lists:keymember(Socket, 1, Users) of
         true ->
+            % ce serait bien d'utiliser une fonction de common, mais comme à ce
+            % moment le socket n'est plus valide on ne peut pas l'utiliser
             Name = common:get_value(Socket, Users),
             {Ip, Port} = Name,
-            Formatted_Name = common:format("~s:~B", [Ip, Port]),
+            Socket_String = common:format("~s:~B", [Ip, Port]),
 
             New_Users = lists:keydelete(Socket, 1, Users),
-
-            common:map(fun(User) -> notify_absence(Formatted_Name, User) end, New_Users),
+            common:map(fun(User) -> notify_absence(Socket_String, User) end, New_Users),
             New_Users;
         false ->
             Users
@@ -113,33 +114,13 @@ user_connect(ListeningSocket) ->
     {ok, Socket} = gen_tcp:accept(ListeningSocket),
     spawn(fun() -> user_connect(ListeningSocket) end),
 
-    case inet:peername(Socket) of
-        {ok, {Address, Port}} ->
-            Str_Address = inet_parse:ntoa(Address),
+    case common:socket_to_name(Socket) of
+        {ok, {Str_Address, Port}} ->
             io:format("Client connected with addr ~s and port ~B~n", [Str_Address, Port]),
             server_pid ! {connect, Socket},
             listen_user_socket(Socket);
         {error, Message} ->
             io:format("Error: ~p~n", [Message])
-    end.
-
-parse_name(Name) ->
-    Splitted_Name = string:tokens(Name, ":\""),
-    case length(Splitted_Name) of
-        2 ->
-            [Str_Address | [Str_Port]] = Splitted_Name,
-            case inet_parse:address(Str_Address) of
-                {ok, _} ->
-                    %TODO: si le port n'est pas un entier
-                    Port = list_to_integer(Str_Port),
-                    {ok, {Str_Address, Port}};
-                {error, _} ->
-                    Reason = common:format("Received ~s as name but ~s address is not valid", [Name, Str_Address]),
-                    {error, Reason}
-                    end;
-        _ ->
-            Reason = common:format("Received ~s as name but a name should have only one ':'", [Name]),
-            {error, Reason}
     end.
 
 listen_user_socket(Socket) ->
@@ -154,7 +135,7 @@ listen_user_socket(Socket) ->
                             server_pid ! {broadcast, Socket, Message};
                         3 ->
                             [Content | [To]] = Message,
-                            case parse_name(To) of
+                            case common:socket_string_to_name(To) of
                                 {ok, {Address, Port}} ->
                                     server_pid ! {message, Socket, Content, {Address, Port}};
                                 {error, Message} ->
