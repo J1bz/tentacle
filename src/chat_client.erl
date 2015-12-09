@@ -1,5 +1,7 @@
 -module(chat_client).
--export([start/2, send/1, send/2, disconnect/0]).
+-export([start/2]).
+-export([send/1, send/2]).
+-export([disconnect/0]).
 
 -define(TCP_OPTIONS, [binary,
                       {packet, 0},

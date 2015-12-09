@@ -1,6 +1,11 @@
 -module(common).
 
--export([sleep/1, map/2, map_except/3, format/2, socket_to_name/1, parse_frame/1, get_value/2, get_key/2]).
+-export([sleep/1]).
+-export([map/2, map_except/3]).
+-export([format/2]).
+-export([socket_to_name/1]).
+-export([parse_frame/1]).
+-export([get_value/2, get_key/2]).
 
 sleep(T) ->
     receive
