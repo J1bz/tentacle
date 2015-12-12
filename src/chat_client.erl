@@ -33,7 +33,7 @@ client(Socket) ->
     receive
         {send, Message} ->
             print_send(Message),
-            gen_tcp:send(Socket, common:format("Data~n~s~n", [Message])),
+            gen_tcp:send(Socket, common:format("Data~n~s~n~n", [Message])),
             client(Socket);
         {send, Message, To_String} ->
             print_send_to(Message, To_String),
