@@ -78,7 +78,6 @@ add_user(Connecting_Socket, Connected_Users) ->
 
 notify_presence(Name, Socket) ->
     Frame = common:format("Presence~n~s~n", [Name]),
-    %TODO: faire de ce socket un name
     io:format("Sending frame ~p to socket ~p~n", [Frame, Socket]),
     gen_tcp:send(Socket, Frame).
 
@@ -149,9 +148,8 @@ user_connect(ListeningSocket) ->
 
     case common:socket_to_name(Socket) of
         {ok, Name} ->
-            %TODO: remplacer texte par Socket ~p submitted a connection to
-            %                          server
-            io:format("Client ~p connected~n", [Name]),
+            io:format("Socket ~p submitted a connection to server~n",
+                      [Socket]),
             server_pid ! {connect, Socket},
             listen_user_socket(Socket, Name);
         {error, Error} ->
