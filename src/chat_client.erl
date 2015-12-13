@@ -45,7 +45,9 @@ client(Socket) ->
             client(Socket);
         {disconnect} ->
             io:format("Disconnecting...~n"),
-            gen_tcp:send(Socket, "Absence");
+            %TODO: before gen_tcp:close listen_server_notifications should be
+            % closed so as not to print "Connection lost" error message
+            gen_tcp:close(Socket);
         stop ->
             true
     end.
