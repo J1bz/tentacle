@@ -88,13 +88,15 @@ rm_user(Socket, Users) ->
         true ->
             Name = common:get_value(Socket, Users),
 
+            io:format("Deleting {~p, ~s} from users list~n", [Socket, Name]),
             New_Users = lists:keydelete(Socket, 1, Users),
+            io:format("Notifying other connected users~n"),
             common:map(fun(User) ->
                         notify_absence(Name, User)
                        end,
                        New_Users),
-            io:format("User ~p successfully disconnected~n",
-                      [Name]),
+            io:format("Disconnect operation for user ~p successfully "
+                      "completed~n", [Name]),
             io:format("Connected users: ~p~n", [New_Users]),
             New_Users;
         false ->
@@ -187,8 +189,7 @@ listen_user_socket(Socket, Name) ->
             end,
             listen_user_socket(Socket, Name);
         {error, closed} ->
-            %TODO: remplacer par Socket closed connection
-            io:format("Connection has been closed by user ~p~n", [Name]),
+            io:format("User ~p closed his socket connection~n", [Name]),
             server_pid ! {disconnect, Socket},
             ok
     end.
