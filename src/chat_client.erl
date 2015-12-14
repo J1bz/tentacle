@@ -40,8 +40,14 @@ client(Socket) ->
             gen_tcp:send(Socket, common:format("Data~n~s~n~s~n",
                                                [Message, To_String])),
             client(Socket);
-        {received, Frame} ->
-            handle_received(Frame),
+        {received, From_Name, Message} ->
+            print_data(From_Name, Message),
+            client(Socket);
+        {presence, Name} ->
+            print_presence(Name),
+            client(Socket);
+        {absence, Name} ->
+            print_absence(Name),
             client(Socket);
         {disconnect} ->
             io:format("Disconnecting...~n"),
@@ -57,18 +63,6 @@ print_send(Message) ->
 
 print_send_to(Message, To_String) ->
     io:format("Me to ~s: ~s~n", [To_String, Message]).
-
-handle_received(Frame) ->
-    case common:parse_frame(Frame) of
-        {data, {From_String, Message}} ->
-            print_data(From_String, Message);
-        {presence, Socket_String} ->
-            print_presence(Socket_String);
-        {absence, Socket_String} ->
-            print_absence(Socket_String);
-        {unknown, Frame} ->
-            ok
-    end.
 
 print_data(From_String, Message) ->
     io:format("~s: ~s~n", [From_String, Message]).
@@ -91,11 +85,72 @@ disconnect() ->
     client_pid ! {disconnect},
     ok.
 
+frame_factory() ->
+    receive
+        "Data" ->
+            io:format("Frame factory detected a data frame~n"),
+            frame_factory(data);
+        "Presence" ->
+            io:format("Frame factory detected a presence frame~n"),
+            frame_factory(presence);
+        "Absence" ->
+            io:format("Frame factory detected an absence frame~n"),
+            frame_factory(absence);
+        Other ->
+            io:format("Frame factory detected ~p : ignoring...~n", [Other]),
+            frame_factory()
+    end.
+frame_factory(data) ->
+    receive
+        String ->
+            io:format("Frame factory detected ~p as a data message~n",
+                      [String]),
+            frame_factory(data, String)
+    end;
+frame_factory(presence) ->
+    receive
+        String ->
+            io:format("Frame factory detected that ~p connected~n", [String]),
+            client_pid ! {presence, String},
+            frame_factory()
+    end;
+frame_factory(absence) ->
+    receive
+        String ->
+            io:format("Frame factory detected that ~p disconnected~n",
+                      [String]),
+            client_pid ! {absence, String},
+            frame_factory()
+    end.
+frame_factory(data, Message) ->
+    receive
+        String ->
+            io:format("Frame factory detected that ~p comes from user ~p~n",
+                      [Message, String]),
+            client_pid ! {received, String, Message},
+            frame_factory()
+    end.
+
 listen_server_notifications(Socket) ->
+    Frame_Factory = spawn(fun() -> frame_factory() end),
+    listen_server_notifications(Frame_Factory, Socket).
+listen_server_notifications(Frame_Factory, Socket) ->
     case gen_tcp:recv(Socket, 0) of
-        {ok, Frame} ->
-            client_pid ! {received, Frame},
-            listen_server_notifications(Socket);
+        {ok, Bytes} ->
+            io:format("Received ~p~n", [Bytes]),
+            Splitted_Bytes = re:split(Bytes, "\n|\r\n"),
+            if
+                length(Splitted_Bytes) > 1 ->
+                    Splitted_Lines = lists:reverse(tl(lists:reverse(
+                        Splitted_Bytes)));
+                true ->  % else
+                    Splitted_Lines = Splitted_Bytes
+            end,
+            common:map(fun(Bytes_Line) ->
+                        io:format("Sending ~p to frame factory~n", [Bytes_Line]),
+                        Frame_Factory ! binary_to_list(Bytes_Line)
+                       end, Splitted_Lines),
+            listen_server_notifications(Frame_Factory, Socket);
         {error, closed} ->
             io:format("Connection lost~n"),
             ok
