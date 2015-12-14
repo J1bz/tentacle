@@ -4,7 +4,6 @@
 -export([map/2, map_except/3]).
 -export([format/2]).
 -export([socket_to_name/1]).
--export([parse_frame/1]).
 -export([get_value/2, get_key/2]).
 
 sleep(T) ->
@@ -36,31 +35,6 @@ socket_to_name(Socket) ->
             {ok, Socket_String};
         {error, Error} ->
             {error, Error}
-    end.
-
-parse_frame(Frame) ->
-    Splitted_Frame = string:tokens(binary_to_list(Frame), "\n"),
-    [Header | Content] = Splitted_Frame,
-    case Header of
-        "Data" ->
-            case length(Content) of
-                1 ->
-                    [Message] = Content,
-                    {data, {Message}};
-                2 ->
-                    [Message | [Socket_String]] = Content,
-                    {data, {Socket_String, Message}};
-                _ ->
-                    {unknown, Frame}
-            end;
-        "Presence" ->
-            Socket_String = [Content],
-            {presence, Socket_String};
-        "Absence" ->
-            Socket_String = [Content],
-            {absence, Socket_String};
-        _ ->
-            {unknown, Frame}
     end.
 
 get_value(_, []) ->
