@@ -170,10 +170,10 @@ frame_factory(Socket) ->
     end.
 frame_factory(Socket, data) ->
     receive
-        String ->
+        Message ->
             io:format("~p's frame factory detected ~p as a data message~n",
-                      [Socket, String]),
-            frame_factory(Socket, data, String)
+                      [Socket, Message]),
+            frame_factory(Socket, data, Message)
     end.
 frame_factory(Socket, data, Message) ->
     receive
@@ -182,10 +182,10 @@ frame_factory(Socket, data, Message) ->
                       "broadcasted~n", [Socket, Message]),
             server_pid ! {broadcast, Socket, Message},
             frame_factory(Socket);
-        String ->
+        To_Name ->
             io:format("~p's frame factory detected that ~p has to be "
-                      "sent to ~p~n", [Socket, Message, String]),
-            server_pid ! {message, Socket, Message, String},
+                      "sent to ~p~n", [Socket, Message, To_Name]),
+            server_pid ! {message, Socket, Message, To_Name},
             frame_factory(Socket)
     end.     
 

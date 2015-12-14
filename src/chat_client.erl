@@ -16,8 +16,8 @@ start(Address, Port) ->
 
 start_client(Str_Address, Port) ->
     case inet:parse_address(Str_Address) of
-        {ok, Parsed_Address} ->
-            case gen_tcp:connect(Parsed_Address, Port, ?TCP_OPTIONS, 5000) of
+        {ok, Address} ->
+            case gen_tcp:connect(Address, Port, ?TCP_OPTIONS, 5000) of
                 {ok, Socket} ->
                     io:format("Connection established~n"),
                     register(client_pid, spawn(fun() -> client(Socket) end)),
@@ -35,10 +35,10 @@ client(Socket) ->
             print_send(Message),
             gen_tcp:send(Socket, common:format("Data~n~s~n~n", [Message])),
             client(Socket);
-        {send, Message, To_String} ->
-            print_send_to(Message, To_String),
+        {send, Message, To_Name} ->
+            print_send_to(Message, To_Name),
             gen_tcp:send(Socket, common:format("Data~n~s~n~s~n",
-                                               [Message, To_String])),
+                                               [Message, To_Name])),
             client(Socket);
         {received, From_Name, Message} ->
             print_data(From_Name, Message),
@@ -59,24 +59,24 @@ client(Socket) ->
 print_send(Message) ->
     io:format("Me: ~s~n", [Message]).
 
-print_send_to(Message, To_String) ->
-    io:format("Me to ~s: ~s~n", [To_String, Message]).
+print_send_to(Message, To_Name) ->
+    io:format("Me to ~s: ~s~n", [To_Name, Message]).
 
-print_data(From_String, Message) ->
-    io:format("~s: ~s~n", [From_String, Message]).
+print_data(From_Name, Message) ->
+    io:format("~s: ~s~n", [From_Name, Message]).
 
-print_presence(Socket_String) ->
-    io:format("~s joined server~n", [Socket_String]).
+print_presence(Name) ->
+    io:format("~s joined server~n", [Name]).
 
-print_absence(Socket_String) ->
-    io:format("~s left server~n", [Socket_String]).
+print_absence(Name) ->
+    io:format("~s left server~n", [Name]).
 
 send(Message) ->
     client_pid ! {send, Message},
     ok.
 
-send(Message, To_String) ->
-    client_pid ! {send, Message, To_String},
+send(Message, To_Name) ->
+    client_pid ! {send, Message, To_Name},
     ok.
 
 disconnect() ->
@@ -100,32 +100,32 @@ frame_factory() ->
     end.
 frame_factory(data) ->
     receive
-        String ->
+        Message ->
             io:format("Frame factory detected ~p as a data message~n",
-                      [String]),
-            frame_factory(data, String)
+                      [Message]),
+            frame_factory(data, Message)
     end;
 frame_factory(presence) ->
     receive
-        String ->
-            io:format("Frame factory detected that ~p connected~n", [String]),
-            client_pid ! {presence, String},
+        Name ->
+            io:format("Frame factory detected that ~p connected~n", [Name]),
+            client_pid ! {presence, Name},
             frame_factory()
     end;
 frame_factory(absence) ->
     receive
-        String ->
+        Name ->
             io:format("Frame factory detected that ~p disconnected~n",
-                      [String]),
-            client_pid ! {absence, String},
+                      [Name]),
+            client_pid ! {absence, Name},
             frame_factory()
     end.
 frame_factory(data, Message) ->
     receive
-        String ->
+        From_Name ->
             io:format("Frame factory detected that ~p comes from user ~p~n",
-                      [Message, String]),
-            client_pid ! {received, String, Message},
+                      [Message, From_Name]),
+            client_pid ! {received, From_Name, Message},
             frame_factory()
     end.
 
