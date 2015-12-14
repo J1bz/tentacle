@@ -14,12 +14,12 @@ start(Port) ->
 
 start_server(Port) ->
     {ok, ListeningSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
-    register(server_pid, spawn(fun() -> server(init) end)),
+    register(server_pid, spawn(fun() -> server() end)),
     spawn(fun() -> user_connect(ListeningSocket) end).
 
-server(init) ->
+server() ->
     io:format("Server main process started~n"),
-    server([]);
+    server([]).
 server(Users) ->
     receive
         {connect, Socket} ->
@@ -153,7 +153,7 @@ user_connect(ListeningSocket) ->
             io:format("Socket ~p submitted a connection to server~n",
                       [Socket]),
             server_pid ! {connect, Socket},
-            listen_user_socket(init, Socket, Name);
+            listen_user_socket(Socket, Name);
         {error, Error} ->
             io:format("Error: ~p~n", [Error])
     end.
@@ -189,9 +189,9 @@ frame_factory(Socket, data, Message) ->
             frame_factory(Socket)
     end.     
 
-listen_user_socket(init, Socket, Name) ->
+listen_user_socket(Socket, Name) ->
     Frame_Factory = spawn(fun() -> frame_factory(Socket) end),
-    listen_user_socket(Frame_Factory, Socket, Name);
+    listen_user_socket(Frame_Factory, Socket, Name).
 listen_user_socket(Frame_Factory, Socket, Name) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Bytes} ->
