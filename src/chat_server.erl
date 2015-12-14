@@ -120,8 +120,9 @@ get_sockets([], Sockets)             -> Sockets.
 message(From_Socket, Message, To_Socket) ->
     case common:socket_to_name(From_Socket) of
         {ok, From_Name} ->
-            gen_tcp:send(To_Socket, common:format("Data~n~s~n~s~n",
-                                                  [Message, From_Name]));
+            Frame = common:format("Data~n~s~n~s~n", [Message, From_Name]),
+            io:format("Sending frame ~p to socket ~p~n", [Frame, To_Socket]),
+            gen_tcp:send(To_Socket, Frame);
         {error, _} ->
             io:format("Wanted to send ~p from ~p to ~p but an error occured "
                       "during ~p string formattng",
@@ -133,6 +134,7 @@ broadcast(From_Socket, Message, Users) ->
     case common:socket_to_name(From_Socket) of
         {ok, From_Name} ->
             Frame = common:format("Data~n~s~n~s~n", [Message, From_Name]),
+            io:format("Broadcasting frame ~p to users ~p~n", [Frame, Users]),
             common:map_except(fun(Socket) ->
                         gen_tcp:send(Socket, Frame)
                        end, Sockets, From_Socket);
@@ -151,41 +153,62 @@ user_connect(ListeningSocket) ->
             io:format("Socket ~p submitted a connection to server~n",
                       [Socket]),
             server_pid ! {connect, Socket},
-            listen_user_socket(Socket, Name);
+            listen_user_socket(init, Socket, Name);
         {error, Error} ->
             io:format("Error: ~p~n", [Error])
     end.
 
-listen_user_socket(Socket, Name) ->
+frame_factory(Socket) ->
+    receive
+        "Data" ->
+            io:format("~p's frame factory detected a data frame~n", [Socket]),
+            frame_factory(Socket, data);
+        Other ->
+            io:format("~p's frame factory detected ~p : ignoring...~n",
+                      [Socket, Other]),
+            frame_factory(Socket)
+    end.
+frame_factory(Socket, data) ->
+    receive
+        String ->
+            io:format("~p's frame factory detected ~p as a data message~n",
+                      [Socket, String]),
+            frame_factory(Socket, data, String)
+    end.
+frame_factory(Socket, data, Message) ->
+    receive
+        "" ->
+            io:format("~p's frame factory detected that ~p has to be "
+                      "broadcasted~n", [Socket, Message]),
+            server_pid ! {broadcast, Socket, Message},
+            frame_factory(Socket);
+        String ->
+            io:format("~p's frame factory detected that ~p has to be "
+                      "sent to ~p~n", [Socket, Message, String]),
+            server_pid ! {message, Socket, Message, String},
+            frame_factory(Socket)
+    end.     
+
+listen_user_socket(init, Socket, Name) ->
+    Frame_Factory = spawn(fun() -> frame_factory(Socket) end),
+    listen_user_socket(Frame_Factory, Socket, Name);
+listen_user_socket(Frame_Factory, Socket, Name) ->
     case gen_tcp:recv(Socket, 0) of
-        {ok, Frame} ->
-            io:format("Received frame ~p from user ~p~n", [Frame, Name]),
-            case common:parse_frame(Frame) of
-                {data, {Message}} ->
-                    io:format("Frame ~p has been detected as a data "
-                              "broadcast frame with message ~s~n",
-                              [Frame, Message]),
-                    server_pid ! {broadcast, Socket, Message};
-                {data, {To_String, Message}} ->
-                    io:format("Frame ~p has been detected as a data "
-                              "message frame with message ~s to send to ~p~n",
-                              [Frame, Message, To_String]),
-                    server_pid ! {message, Socket, Message, To_String};
-                {presence, Socket_String} ->
-                    io:format("Frame ~p has been detected as a presence from "
-                              "~s, but server is not supposed to receive "
-                              "this frame... ignoring~n",
-                              [Frame, Socket_String]);
-                {absence, Socket_String} ->
-                    io:format("Frame ~p has been detected as an absence from "
-                              "~s, but server is not supposed to receive "
-                              "this frame... ignoring~n",
-                              [Frame, Socket_String]);
-                {unkown, Frame} ->
-                    io:format("Frame ~p has not been recognized... ignoring~n",
-                              [Frame])
+        {ok, Bytes} ->
+            io:format("Received ~p from socket ~p~n", [Bytes, Socket]),
+            Splitted_Bytes = re:split(Bytes, "\n|\r\n"),
+            if
+                length(Splitted_Bytes) > 1 ->
+                    Splitted_Lines = lists:reverse(tl(lists:reverse(
+                        Splitted_Bytes)));
+                true ->  % else
+                    Splitted_Lines = Splitted_Bytes
             end,
-            listen_user_socket(Socket, Name);
+            common:map(fun(Bytes_Line) ->
+                        io:format("Sending ~p to frame factory~n", [Bytes_Line]),
+                        Frame_Factory ! binary_to_list(Bytes_Line)
+                       end, Splitted_Lines),
+            listen_user_socket(Frame_Factory, Socket, Name);
         {error, closed} ->
             io:format("User ~p closed his socket connection~n", [Name]),
             server_pid ! {disconnect, Socket},
