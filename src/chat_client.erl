@@ -21,7 +21,7 @@ start_client(Str_Address, Port) ->
                 {ok, Socket} ->
                     io:format("Connection established~n"),
                     register(client_pid, spawn(fun() -> client(Socket) end)),
-                    spawn(fun() -> listen_server_notifications(Socket) end);
+                    spawn(fun() -> listen_server_socket(Socket) end);
                 {error, Error} ->
                     io:format("Error ~s~n", [Error])
             end;
@@ -51,8 +51,6 @@ client(Socket) ->
             client(Socket);
         {disconnect} ->
             io:format("Disconnecting...~n"),
-            %TODO: before gen_tcp:close listen_server_notifications should be
-            % closed so as not to print "Connection lost" error message
             gen_tcp:close(Socket);
         stop ->
             true
@@ -131,10 +129,10 @@ frame_factory(data, Message) ->
             frame_factory()
     end.
 
-listen_server_notifications(Socket) ->
+listen_server_socket(Socket) ->
     Frame_Factory = spawn(fun() -> frame_factory() end),
-    listen_server_notifications(Frame_Factory, Socket).
-listen_server_notifications(Frame_Factory, Socket) ->
+    listen_server_socket(Frame_Factory, Socket).
+listen_server_socket(Frame_Factory, Socket) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Bytes} ->
             io:format("Received ~p~n", [Bytes]),
@@ -150,7 +148,7 @@ listen_server_notifications(Frame_Factory, Socket) ->
                         io:format("Sending ~p to frame factory~n", [Bytes_Line]),
                         Frame_Factory ! binary_to_list(Bytes_Line)
                        end, Splitted_Lines),
-            listen_server_notifications(Frame_Factory, Socket);
+            listen_server_socket(Frame_Factory, Socket);
         {error, closed} ->
             io:format("Connection lost~n"),
             ok
