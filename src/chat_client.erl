@@ -48,22 +48,22 @@ start_client(Str_Address, Port) ->
 client(Socket) ->
     receive
         {send, Message} ->
-            print_send(Message),
+            % print_send(Message),
             gen_tcp:send(Socket, common:format("Data~n~s~n~n", [Message])),
             client(Socket);
         {send, Message, To_Name} ->
-            print_send_to(Message, To_Name),
+            % print_send_to(Message, To_Name),
             gen_tcp:send(Socket, common:format("Data~n~s~n~s~n",
                                                [Message, To_Name])),
             client(Socket);
         {received, From_Name, Message} ->
-            print_data(From_Name, Message),
+            chat_client_ui:notify_data(From_Name, Message),
             client(Socket);
         {presence, Name} ->
-            print_presence(Name),
+            chat_client_ui:notify_presence(Name),
             client(Socket);
         {absence, Name} ->
-            print_absence(Name),
+            chat_client_ui:notify_absence(Name),
             client(Socket);
         {disconnect} ->
             error_logger:info_msg("Disconnecting...~n"),
@@ -72,20 +72,20 @@ client(Socket) ->
             true
     end.
 
-print_send(Message) ->
-    io:format("Me: ~s~n", [Message]).
-
-print_send_to(Message, To_Name) ->
-    io:format("Me to ~s: ~s~n", [To_Name, Message]).
-
-print_data(From_Name, Message) ->
-    io:format("~s: ~s~n", [From_Name, Message]).
-
-print_presence(Name) ->
-    io:format("~s joined server~n", [Name]).
-
-print_absence(Name) ->
-    io:format("~s left server~n", [Name]).
+% print_send(Message) ->
+%     io:format("Me: ~s~n", [Message]).
+% 
+% print_send_to(Message, To_Name) ->
+%     io:format("Me to ~s: ~s~n", [To_Name, Message]).
+% 
+% print_data(From_Name, Message) ->
+%     io:format("~s: ~s~n", [From_Name, Message]).
+% 
+% print_presence(Name) ->
+%     io:format("~s joined server~n", [Name]).
+% 
+% print_absence(Name) ->
+%     io:format("~s left server~n", [Name]).
 
 send(Message) ->
     client_pid ! {send, Message},
