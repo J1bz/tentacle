@@ -1,5 +1,5 @@
 -module(chat_client).
--export([start/2]).
+-export([start/2, start/3]).
 -export([send/1, send/2]).
 -export([disconnect/0]).
 
@@ -8,9 +8,25 @@
                       {active, false},
                       {reuseaddr, true}]).
 
-start(Address, Port) ->
+start(Str_Address, Port) ->
+    start(Str_Address, Port, none).
+start(Str_Address, Port, Log_File) ->
+    error_logger:tty(false),
+    case Log_File of
+        none ->
+            io:format("No logfile has been supplied : debug logs will be "
+                      "ignored~n");
+        File ->
+            case error_logger:logfile({open, File}) of
+                ok ->
+                    io:format("Logging debug informations in ~p~n", [File]);
+                {error, Error} ->
+                    io:format("Error opening ~p: ~p~n", [File, Error]),
+                    io:format("Debug logs will be ignored~n")
+            end
+    end,
     spawn(fun() ->
-            start_client(Address, Port),
+            start_client(Str_Address, Port),
             common:sleep(infinity)
           end).
 
@@ -19,14 +35,14 @@ start_client(Str_Address, Port) ->
         {ok, Address} ->
             case gen_tcp:connect(Address, Port, ?TCP_OPTIONS, 5000) of
                 {ok, Socket} ->
-                    io:format("Connection established~n"),
+                    error_logger:info_msg("Connection established~n"),
                     register(client_pid, spawn(fun() -> client(Socket) end)),
                     spawn(fun() -> listen_server_socket(Socket) end);
                 {error, Error} ->
-                    io:format("Error ~s~n", [Error])
+                    error_logger:error_msg("Error ~s~n", [Error])
             end;
         {error, Error} ->
-            io:format("Error ~s~n", [Error])
+            error_logger:error_msg("Error ~s~n", [Error])
     end.
 
 client(Socket) ->
@@ -50,7 +66,7 @@ client(Socket) ->
             print_absence(Name),
             client(Socket);
         {disconnect} ->
-            io:format("Disconnecting...~n"),
+            error_logger:info_msg("Disconnecting...~n"),
             gen_tcp:close(Socket);
         stop ->
             true
@@ -86,45 +102,47 @@ disconnect() ->
 frame_factory() ->
     receive
         "Data" ->
-            io:format("Frame factory detected a data frame~n"),
+            error_logger:info_msg("Frame factory detected a data frame~n"),
             frame_factory(data);
         "Presence" ->
-            io:format("Frame factory detected a presence frame~n"),
+            error_logger:info_msg("Frame factory detected a presence frame~n"),
             frame_factory(presence);
         "Absence" ->
-            io:format("Frame factory detected an absence frame~n"),
+            error_logger:info_msg("Frame factory detected an absence frame~n"),
             frame_factory(absence);
         Other ->
-            io:format("Frame factory detected ~p : ignoring...~n", [Other]),
+            error_logger:info_msg("Frame factory detected ~p : ignoring...~n",
+                                  [Other]),
             frame_factory()
     end.
 frame_factory(data) ->
     receive
         Message ->
-            io:format("Frame factory detected ~p as a data message~n",
-                      [Message]),
+            error_logger:info_msg("Frame factory detected ~p as a data "
+                                  "message~n", [Message]),
             frame_factory(data, Message)
     end;
 frame_factory(presence) ->
     receive
         Name ->
-            io:format("Frame factory detected that ~p connected~n", [Name]),
+            error_logger:info_msg("Frame factory detected that ~p connected~n",
+                                  [Name]),
             client_pid ! {presence, Name},
             frame_factory()
     end;
 frame_factory(absence) ->
     receive
         Name ->
-            io:format("Frame factory detected that ~p disconnected~n",
-                      [Name]),
+            error_logger:info_msg("Frame factory detected that ~p "
+                                  "disconnected~n", [Name]),
             client_pid ! {absence, Name},
             frame_factory()
     end.
 frame_factory(data, Message) ->
     receive
         From_Name ->
-            io:format("Frame factory detected that ~p comes from user ~p~n",
-                      [Message, From_Name]),
+            error_logger:info_msg("Frame factory detected that ~p comes from "
+                                  "user ~p~n", [Message, From_Name]),
             client_pid ! {received, From_Name, Message},
             frame_factory()
     end.
@@ -135,7 +153,7 @@ listen_server_socket(Socket) ->
 listen_server_socket(Frame_Factory, Socket) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Bytes} ->
-            io:format("Received ~p~n", [Bytes]),
+            error_logger:info_msg("Received ~p~n", [Bytes]),
             Splitted_Bytes = re:split(Bytes, "\n|\r\n"),
             if
                 length(Splitted_Bytes) > 1 ->
@@ -145,11 +163,12 @@ listen_server_socket(Frame_Factory, Socket) ->
                     Splitted_Lines = Splitted_Bytes
             end,
             common:map(fun(Bytes_Line) ->
-                        io:format("Sending ~p to frame factory~n", [Bytes_Line]),
+                        error_logger:info_msg("Sending ~p to frame factory~n",
+                                              [Bytes_Line]),
                         Frame_Factory ! binary_to_list(Bytes_Line)
                        end, Splitted_Lines),
             listen_server_socket(Frame_Factory, Socket);
         {error, closed} ->
-            io:format("Connection lost~n"),
+            error_logger:info_msg("Connection lost~n"),
             ok
     end.
