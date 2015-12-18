@@ -90,7 +90,7 @@ add_user(Connecting_Socket, Connected_Users) ->
                                           "server~n", [Connecting_Name]),
                     New_Users =  [{Connecting_Socket, Connecting_Name} |
                                   Connected_Users],
-                    io:format("Connected users: ~p~n", [New_Users]),
+                    chat_server_ui:notify_presence(Connecting_Name),
                     New_Users
             end;
         {error, Error} ->
@@ -119,8 +119,7 @@ rm_user(Socket, Users) ->
                        New_Users),
             error_logger:info_msg("Disconnect operation for user ~p "
                                   "successfully completed~n", [Name]),
-            io:format("Connected users: ~p~n", [New_Users]),
-            New_Users;
+            chat_server_ui:notify_absence(Name);
         false ->
             error_logger:error_msg("Socket ~p wanted to disconnect from "
                                    "server, but it is not in users list~n",
@@ -149,7 +148,7 @@ kick_user(Name, Users) ->
                        New_Users),
             error_logger:info_msg("Kick operation for name ~p "
                                   "successfully completed~n", [Name]),
-            io:format("Connected users: ~p~n", [New_Users]),
+            chat_server_ui:notify_absence(Name),
             New_Users;
         false ->
             error_logger:error_msg("Kick name from server ~p has been "
