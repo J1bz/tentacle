@@ -8,6 +8,15 @@
                       {active, false},
                       {reuseaddr, true}]).
 
+%% ----------------------------------
+%% @doc
+%% Entry point for client core.
+%% Str_Address: Server ipv4 address as a string
+%% Port: Server port as an integer between 1 and 65535
+%% Log_File: optional string argument refering to file where to write debug
+%%           logs
+%% @end
+%% ----------------------------------
 start(Str_Address, Port) ->
     start(Str_Address, Port, none).
 start(Str_Address, Port, Log_File) ->
@@ -30,6 +39,12 @@ start(Str_Address, Port, Log_File) ->
             common:sleep(infinity)
           end).
 
+%% ----------------------------------
+%% @doc
+%% Creates client events-handling main loop registering it as client_pid. Also
+%% launches a loop listening to server received messages.
+%% @end
+%% ----------------------------------
 start_client(Str_Address, Port) ->
     case inet:parse_address(Str_Address) of
         {ok, Address} ->
@@ -45,14 +60,18 @@ start_client(Str_Address, Port) ->
             error_logger:error_msg("Error ~s~n", [Error])
     end.
 
+%% ----------------------------------
+%% @doc
+%% Main events loop. Inter-process messages are received and trigger
+%% event-specific functions.
+%% @end
+%% ----------------------------------
 client(Socket) ->
     receive
         {send, Message} ->
-            % print_send(Message),
             gen_tcp:send(Socket, common:format("Data~n~s~n~n", [Message])),
             client(Socket);
         {send, Message, To_Name} ->
-            % print_send_to(Message, To_Name),
             gen_tcp:send(Socket, common:format("Data~n~s~n~s~n",
                                                [Message, To_Name])),
             client(Socket);
@@ -72,33 +91,41 @@ client(Socket) ->
             true
     end.
 
-% print_send(Message) ->
-%     io:format("Me: ~s~n", [Message]).
-% 
-% print_send_to(Message, To_Name) ->
-%     io:format("Me to ~s: ~s~n", [To_Name, Message]).
-% 
-% print_data(From_Name, Message) ->
-%     io:format("~s: ~s~n", [From_Name, Message]).
-% 
-% print_presence(Name) ->
-%     io:format("~s joined server~n", [Name]).
-% 
-% print_absence(Name) ->
-%     io:format("~s left server~n", [Name]).
-
+%% ----------------------------------
+%% @doc
+%% External entry point to broadcast messages to server. It should be called by
+%% chat_client_ui.
+%% @end
+%% ----------------------------------
 send(Message) ->
     client_pid ! {send, Message},
     ok.
 
+%% ----------------------------------
+%% @doc
+%% External entry point to send messages to server. It should be called by
+%% chat_client_ui.
+%% @end
+%% ----------------------------------
 send(Message, To_Name) ->
     client_pid ! {send, Message, To_Name},
     ok.
 
+%% ----------------------------------
+%% @doc
+%% External entry point to disconnect from server. It should be called by
+%% chat_client_ui.
+%% @end
+%% ----------------------------------
 disconnect() ->
     client_pid ! {disconnect},
     ok.
 
+%% ----------------------------------
+%% @doc
+%% frame_factory is a kind of finished states machine to parse received frames
+%% @end
+%% ----------------------------------
 frame_factory() ->
     receive
         "Data" ->
@@ -147,6 +174,13 @@ frame_factory(data, Message) ->
             frame_factory()
     end.
 
+%% ----------------------------------
+%% @doc
+%% Listening loop for server-side reception frames. It should be called only
+%% with a gen_tcp socket argument. It will itself ``instanciate'' a
+%% frame_factory.
+%% @end
+%% ----------------------------------
 listen_server_socket(Socket) ->
     Frame_Factory = spawn(fun() -> frame_factory() end),
     listen_server_socket(Frame_Factory, Socket).
