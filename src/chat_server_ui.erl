@@ -81,7 +81,6 @@ create_window(Wx)->
   %% Create menu
   Menuconnexion = wxMenu:new(),
   wxMenu:append(Menuconnexion,?wxID_OPEN, "&Connect"),
-  wxMenu:append(Menuconnexion,?wxID_CLOSE, "&Disconnect"),
   %% create and add the status bar
   wxFrame:createStatusBar(Parent),
 
@@ -179,12 +178,6 @@ loop(State) ->
   %% Handle click on the Connect submenu item
     #wx{id = ?wxID_OPEN, event = #wxCommand{type = command_menu_selected}} ->
       chat_server:start(?PORT),
-      loop(State);
-  %% Handle click on the Disconnect submenu item
-    #wx{id = ?wxID_CLOSE, event = #wxCommand{type = command_menu_selected}} ->
-      wxFrame:setStatusText(Frame,"Status: Quitting..."),
-      %%TODO Add disconnect command from server
-      wxFrame:setStatusText(Frame,"Status: Disconnected."),
       loop(State);
   %% Handle click on the exit button
     #wx{id = ?wxID_EXIT, event = #wxCommand{type = command_button_clicked}} ->
