@@ -10,12 +10,12 @@
 %% API
 -include_lib("wx/include/wx.hrl").
 
--export([start/0]).
+-export([start/0,notify_absence/1,notify_presence/1]).
 -define(PORT,13).
 
-
+%% Start the
 start()->
-  register(ui_pid, spawn(fun()->
+  register(server_ui_pid, spawn(fun()->
     Wx = wx:new(),
     State = wx:batch(fun() -> create_window(Wx) end),
     loop(State)
@@ -29,7 +29,7 @@ create_window(Wx)->
   Parent = wxFrame:new(Wx,
     -1,
     "Chat server",
-    [{size, {500, 400}}]),
+    [{size, {220, 380}}]),
 
   %% Create panel
   Panel = wxScrolledWindow:new(Parent, []),
@@ -102,14 +102,28 @@ loop(State) ->
   {Frame, Listboxwg} = State,
 
   receive
+    {presence,Name} ->
+      wxFrame:setStatusText(Frame,"Status: Receiving status..."),
+      wxListBox:append(Listboxwg,Name),
+      wxFrame:setStatusText(Frame,"Status: Finished."),
+      loop(State);
+    {absence,Name} ->
+      wxFrame:setStatusText(Frame,"Status: Receiving status..."),
+      IndexOfName = wxListBox:findString(Listboxwg,Name),
+      if IndexOfName > -1 ->
+        wxListBox:delete(Listboxwg,IndexOfName);
+        true -> error_logger:error_msg("Unknown client name tried to disconnect from UI")
+      end,
+      wxFrame:setStatusText(Frame,"Status: Finished."),
+      loop(State);
   %% the Send button is clicked
     #wx{id = 4, event = #wxCommand{type = command_button_clicked}} ->
       wxFrame:setStatusText(Frame,"Status: Kicking..."),
       ToNameindex = wxListBox:getSelection(Listboxwg),
       if ok;
         ToNameindex > 0 ->
-          UserName = wxListBox:getStringSelection(Listboxwg);
-        %%TODO Add kick command
+          UserName = wxListBox:getStringSelection(Listboxwg),
+        chat_server:kick(UserName);
         true ->
           ok
       end,
@@ -139,3 +153,11 @@ loop(State) ->
     _ ->
       loop(State)
   end.
+
+notify_presence(Name) ->
+  server_ui_pid ! {presence,Name},
+  ok.
+
+notify_absence(Name) ->
+  server_ui_pid ! {absence, Name},
+  ok.
