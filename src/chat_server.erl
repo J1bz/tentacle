@@ -1,5 +1,6 @@
 -module(chat_server).
 -export([start/1, start/2]).
+-export([kick/1]).
 
 -define(TCP_OPTIONS, [binary,
                       {packet, 0},
@@ -43,6 +44,9 @@ server(Users) ->
             server(New_Users);
         {disconnect, Socket} ->
             New_Users = rm_user(Socket, Users),
+            server(New_Users);
+        {kick, Name} ->
+            New_Users = kick_user(Name, Users),
             server(New_Users);
         {broadcast, Socket, Frame} ->
             broadcast(Socket, Frame, Users),
@@ -125,9 +129,44 @@ rm_user(Socket, Users) ->
             Users
     end.
 
+kick_user(Name, Users) ->
+    case lists:keymember(Name, 2, Users) of
+        true ->
+            Socket = common:get_key(Name, Users),
+
+            notify_kicked(Name, Socket),
+
+            error_logger:info_msg("Closing socket ~p (~s)~n", [Socket, Name]),
+            gen_tcp:close(Socket),
+
+            error_logger:info_msg("Deleting {~p, ~s} from users list~n",
+                                  [Socket, Name]),
+            New_Users = lists:keydelete(Name, 2, Users),
+
+            common:map(fun(User) ->
+                        notify_absence(Name, User)
+                       end,
+                       New_Users),
+            error_logger:info_msg("Kick operation for name ~p "
+                                  "successfully completed~n", [Name]),
+            io:format("Connected users: ~p~n", [New_Users]),
+            New_Users;
+        false ->
+            error_logger:error_msg("Kick name from server ~p has been "
+                                   "requested, but it is not in users list~n",
+                                   [Name]),
+            io:format("Connected users: ~p~n", [Users]),
+            Users
+    end.
+
 notify_absence(Name, User) ->
     {Socket, _} = User,
     Frame = common:format("Absence~n~s~n", [Name]),
+    error_logger:info_msg("Sending frame ~p to socket ~p~n", [Frame, Socket]),
+    gen_tcp:send(Socket, Frame).
+
+notify_kicked(Name, Socket) ->
+    Frame = common:format("Data~nYou have been kicked!~n~s~n", [Name]),
     error_logger:info_msg("Sending frame ~p to socket ~p~n", [Frame, Socket]),
     gen_tcp:send(Socket, Frame).
 
@@ -166,6 +205,10 @@ broadcast(From_Socket, Message, Users) ->
                                    "occured while its socket was formatted "
                                    "to string", [Message, From_Socket])
     end.
+
+kick(Name) ->
+    server_pid ! {kick, Name},
+    ok.
 
 user_connect(ListeningSocket) ->
     {ok, Socket} = gen_tcp:accept(ListeningSocket),
