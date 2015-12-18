@@ -9,6 +9,9 @@
 
 %% API
 -include_lib("wx/include/wx.hrl").
+-define(PORT,13).
+-define(ADDRESS,"127.0.0.1").
+
 
 -export([start/0, notify_data/2,notify_absence/1,notify_presence/1]).
 
@@ -36,6 +39,7 @@ create_window(Wx)->
   %% Create menu
   Menuconnexion = wxMenu:new(),
   wxMenu:append(Menuconnexion,?wxID_OPEN, "&Connect"),
+  wxMenu:append(Menuconnexion,?wxID_CLOSE, "&Disconnect"),
   %% create and add the status bar
   wxFrame:createStatusBar(Parent),
 
@@ -161,7 +165,14 @@ loop(State) ->
       loop(State);
   %% The connect menu item is clicked
     #wx{id = ?wxID_OPEN, event = #wxCommand{type = command_menu_selected}} ->
-      chat_client:start("127.0.0.1",13),
+      chat_client:start(?ADDRESS,?PORT),
+      loop(State);
+  %% The disconnect menu item is clicked
+    #wx{id = ?wxID_CLOSE, event = #wxCommand{type = command_menu_selected}} ->
+      wxFrame:setStatusText(Frame,"Status: Quitting..."),
+      chat_client:disconnect(),
+      wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ "You disconnected.\n"),
+      wxFrame:setStatusText(Frame,"Status: Disconnected."),
       loop(State);
   %% The exit button is clicked
     #wx{id = ?wxID_EXIT, event = #wxCommand{type = command_button_clicked}} ->
@@ -170,8 +181,8 @@ loop(State) ->
       ok;
   %% Window Close Event
     #wx{event=#wxClose{}} ->
-      io:format("~p Closing window ~n",[self()]),
-      chat_client:disconnect(),
+      error_logger:info_msg("~p Closing window ~n",[self()]),
+      %%chat_client:disconnect(),
       wxWindow:destroy(Frame),
       ok;
   %% default handling
