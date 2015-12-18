@@ -1,20 +1,32 @@
 %%%-------------------------------------------------------------------
+%%% @author P.Alameda and J.Braun
 %%% @copyright (C) 2015, Telecom Lille
 %%% @doc
-%%%
+%%% The UI for chat_client. The UI is decorrelated from the back end, so you can open or close the UI at any
+%%% moment without changing the state of the client itself. The UI can start or disconnect a client, or be started
+%%% while the client is already launched.
 %%% @end
-%%% Created : 29. oct. 2015 09:27
 %%%-------------------------------------------------------------------
 -module(chat_client_ui).
 
 %% API
 -include_lib("wx/include/wx.hrl").
+
 -define(PORT,13).
 -define(ADDRESS,"127.0.0.1").
 
-
 -export([start/0, notify_data/2,notify_absence/1,notify_presence/1]).
 
+%%%===================================================================
+%%% API functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Starts the UI by creating a window, then start the loop for event handling.
+%% The UI callback functions can be called by using ui_pid.
+%% @end
+%%--------------------------------------------------------------------
 start()->
   register(ui_pid, spawn(fun()->
     Wx = wx:new(),
@@ -23,10 +35,49 @@ start()->
                          end)),
   ok.
 
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback function called by the client to update the UI for a data message.
+%% Sends an event to the loop.
+%% @end
+%%--------------------------------------------------------------------
+notify_data(Name, Message) ->
+  ui_pid ! {message,Name, Message},
+  ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback function called by the client to update the UI for a connecting message.
+%% Sends an event to the loop.
+%% @end
+%%--------------------------------------------------------------------
+notify_presence(Name) ->
+  ui_pid ! {presence,Name},
+  ok.
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Callback function called by the client to update the UI for a disconnecting message.
+%% Sends an event to the loop.
+%% @end
+%%--------------------------------------------------------------------
+notify_absence(Name) ->
+  ui_pid ! {absence, Name},
+  ok.
+
+%%%===================================================================
+%%% Internal functions
+%%%===================================================================
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Create the UI elements and returns a state with each interacting element.
+%%
+%% @end
+%%--------------------------------------------------------------------
 create_window(Wx)->
 
   %% Create Frame
-
   Parent = wxFrame:new(Wx,
     -1,
     "Chat client",
@@ -34,8 +85,10 @@ create_window(Wx)->
 
   %% Create panel
   Panel = wxScrolledWindow:new(Parent, []),
+
   %% Create menu bar
   Menubar = wxMenuBar:new(),
+
   %% Create menu
   Menuconnexion = wxMenu:new(),
   wxMenu:append(Menuconnexion,?wxID_OPEN, "&Connect"),
@@ -63,7 +116,6 @@ create_window(Wx)->
   %% Create the exit button widget
   Exitbutton = wxButton:new(Panel, ?wxID_EXIT, [{label, "E&xit"}]),
 
-
   %% Setup sizers
   OuterSizer = wxBoxSizer:new(?wxHORIZONTAL),
   MainSizer = wxBoxSizer:new(?wxVERTICAL),
@@ -79,16 +131,12 @@ create_window(Wx)->
   wxSizer:add(ChatSizer,ListBoxSizer,[]),
   wxSizer:add(MainSizer,ChatSizer,[]),
   wxSizer:addSpacer(MainSizer, 10),
-
   wxSizer:add(MainSizer, Sendtextwg, []),
-
   wxSizer:addSpacer(MainSizer, 5),
   wxSizer:add(ButtonSizer, Sendbutton, []),
-
   wxSizer:addSpacer(ButtonSizer, 5),
   wxSizer:add(ButtonSizer, Exitbutton, []),
   wxSizer:add(MainSizer, ButtonSizer, []),
-
   wxSizer:addSpacer(OuterSizer, 10),
   wxSizer:add(OuterSizer, MainSizer, []),
 
@@ -107,27 +155,36 @@ create_window(Wx)->
   wxFrame:connect(Sendtextwg, set_focus),
   wxFrame:connect(Parent, command_menu_selected),
 
+  %% Show the frame
   wxFrame:show(Parent),
 
+  %% Returns the state for the loop
   {Parent, Outputtextwg, Sendtextwg, Listboxwg}.
 
-
+%%--------------------------------------------------------------------
+%% @doc
+%% Loop to handle events used to update the UI.
+%%
+%% @end
+%%--------------------------------------------------------------------
 loop(State) ->
   {Frame, Outputtextwg, Sendtextwg, Listboxwg} = State,
-
   receive
+    %% Handle message display
     {message, Name, Message} ->
       wxFrame:setStatusText(Frame,"Status: Receiving status..."),
       Sendtextval = Name ++ ": " ++ Message ++ "\n",
       wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ Sendtextval),
       wxFrame:setStatusText(Frame,"Status: Finished."),
       loop(State);
+    %% Handle connecting user display
     {presence,Name} ->
       wxFrame:setStatusText(Frame,"Status: Receiving status..."),
       wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ Name ++ " connected.\n"),
       wxListBox:append(Listboxwg,Name),
       wxFrame:setStatusText(Frame,"Status: Finished."),
       loop(State);
+    %% Handle disconnecting user display
     {absence,Name} ->
       wxFrame:setStatusText(Frame,"Status: Receiving status..."),
       IndexOfName = wxListBox:findString(Listboxwg,Name),
@@ -138,7 +195,7 @@ loop(State) ->
       end,
       wxFrame:setStatusText(Frame,"Status: Finished."),
       loop(State);
-  %% the Send button is clicked
+  %% Handle click on the Send button
     #wx{id = 4, event = #wxCommand{type = command_button_clicked}} ->
       wxFrame:setStatusText(Frame,"Status: Sending..."),
       Sendtextval = wxTextCtrl:getValue(Sendtextwg),
@@ -155,7 +212,7 @@ loop(State) ->
       wxTextCtrl:clear(Sendtextwg),
       wxTextCtrl:setFocus(Sendtextwg),
       loop(State);
-  %% the send text control is focused
+  %% Handle focus on the input text control
     #wx{id = 3, event = #wxFocus{type = set_focus}} ->
       Sendtextval = wxTextCtrl:getValue(Sendtextwg),
       if Sendtextval =:= "Enter text here" ->
@@ -163,43 +220,29 @@ loop(State) ->
         true -> wxTextCtrl:setFocus(Sendtextwg)
       end,
       loop(State);
-  %% The connect menu item is clicked
+  %% Handle click on the Connect submenu item
     #wx{id = ?wxID_OPEN, event = #wxCommand{type = command_menu_selected}} ->
       chat_client:start(?ADDRESS,?PORT),
       loop(State);
-  %% The disconnect menu item is clicked
+  %% Handle click on the Disconnect submenu item
     #wx{id = ?wxID_CLOSE, event = #wxCommand{type = command_menu_selected}} ->
       wxFrame:setStatusText(Frame,"Status: Quitting..."),
       chat_client:disconnect(),
       wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ "You disconnected.\n"),
       wxFrame:setStatusText(Frame,"Status: Disconnected."),
       loop(State);
-  %% The exit button is clicked
+  %% Handle click on the exit button
     #wx{id = ?wxID_EXIT, event = #wxCommand{type = command_button_clicked}} ->
       wxFrame:setStatusText(Frame,"Status: Quitting..."),
       wxWindow:destroy(Frame),
       ok;
-  %% Window Close Event
+  %% Handle click on the X on the upper-right of the window
     #wx{event=#wxClose{}} ->
       error_logger:info_msg("~p Closing window ~n",[self()]),
       %%chat_client:disconnect(),
       wxWindow:destroy(Frame),
       ok;
-  %% default handling
+  %% Default handling
     _ ->
       loop(State)
   end.
-
-
-
-notify_data(Name, Message) ->
-  ui_pid ! {message,Name, Message},
-  ok.
-
-notify_presence(Name) ->
-  ui_pid ! {presence,Name},
-  ok.
-
-notify_absence(Name) ->
-  ui_pid ! {absence, Name},
-  ok.
