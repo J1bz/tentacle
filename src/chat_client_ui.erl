@@ -116,7 +116,7 @@ loop(State) ->
   {Frame, Outputtextwg, Sendtextwg, Listboxwg} = State,
 
   receive
-    {message, Message, Name} ->
+    {message, Name, Message} ->
       wxFrame:setStatusText(Frame,"Status: Receiving status..."),
       Sendtextval = Name ++ ": " ++ Message ++ "\n",
       wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ Sendtextval),
@@ -192,8 +192,8 @@ loop(State) ->
 
 
 
-notify_data(Message, Name) ->
-  ui_pid ! {message,Message, Name},
+notify_data(Name, Message) ->
+  ui_pid ! {message,Name, Message},
   ok.
 
 notify_presence(Name) ->
