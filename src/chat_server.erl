@@ -7,6 +7,15 @@
                       {active, false},
                       {reuseaddr, true}]).
 
+%% ----------------------------------
+%% @doc
+%% Entry point for server core.
+%% Port: Server port as an integer between 1 and 65535. It should not be used,
+%%       and you should check if you have rights to use this port (1-1024).
+%% Log_File: optional string argument refering to file where to write debug
+%%           logs
+%% @end
+%% ----------------------------------
 start(Port) ->
     start(Port, none).
 start(Port, Log_File) ->
@@ -29,11 +38,23 @@ start(Port, Log_File) ->
             common:sleep(infinity)
           end).
 
+%% ----------------------------------
+%% @doc
+%% Creates server events-handling main loop registering it as server_pid. Also
+%% launches a loop listening to clients connections.
+%% @end
+%% ----------------------------------
 start_server(Port) ->
     {ok, ListeningSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
     register(server_pid, spawn(fun() -> server() end)),
     spawn(fun() -> user_connect(ListeningSocket) end).
 
+%% ----------------------------------
+%% @doc
+%% Main events loop. Inter-process messages are received and trigger
+%% event-specific functions.
+%% @end
+%% ----------------------------------
 server() ->
     error_logger:info_msg("Server main process started~n"),
     server([]).
@@ -65,6 +86,12 @@ server(Users) ->
             true
     end.
 
+%% ----------------------------------
+%% @doc
+%% Handle operation to add an user to connected users and refuse it if an
+%% error occurs.
+%% @end
+%% ----------------------------------
 add_user(Connecting_Socket, Connected_Users) ->
     case common:socket_to_name(Connecting_Socket) of
         {ok, Connecting_Name} ->
@@ -98,13 +125,23 @@ add_user(Connecting_Socket, Connected_Users) ->
             Connected_Users
     end.
 
+%% ----------------------------------
+%% @doc
+%% Handle operation to send a presence frame to a socket and log it.
+%% @end
+%% ----------------------------------
 notify_presence(Name, Socket) ->
     Frame = common:format("Presence~n~s~n", [Name]),
     error_logger:info_msg("Sending frame ~p to socket ~p~n", [Frame, Socket]),
     gen_tcp:send(Socket, Frame).
 
+%% ----------------------------------
+%% @doc
+%% Handle operation to remove an user from connected users or abort it if an
+%% error occurs (socket not present in connected users).
+%% @end
+%% ----------------------------------
 rm_user(Socket, Users) ->
-    % case au cas ou le serveur a recu une mauvaise info
     case lists:keymember(Socket, 1, Users) of
         true ->
             Name = common:get_value(Socket, Users),
@@ -128,6 +165,12 @@ rm_user(Socket, Users) ->
             Users
     end.
 
+%% ----------------------------------
+%% @doc
+%% Handle operation to kick an user from connected users or abort it if an
+%% error occurs (socket not present in connected users).
+%% @end
+%% ----------------------------------
 kick_user(Name, Users) ->
     case lists:keymember(Name, 2, Users) of
         true ->
@@ -158,23 +201,46 @@ kick_user(Name, Users) ->
             Users
     end.
 
+%% ----------------------------------
+%% @doc
+%% Handle operation to send an absence frame to a socket and log it.
+%% @end
+%% ----------------------------------
 notify_absence(Name, User) ->
     {Socket, _} = User,
     Frame = common:format("Absence~n~s~n", [Name]),
     error_logger:info_msg("Sending frame ~p to socket ~p~n", [Frame, Socket]),
     gen_tcp:send(Socket, Frame).
 
+%% ----------------------------------
+%% @doc
+%% Handle operation to send a data frame informing kicked user that it has
+%% been kicked, since gen_tcp:close does not inform peer connected it has been
+%% disconnected and log it.
+%% @end
+%% ----------------------------------
 notify_kicked(Name, Socket) ->
     Frame = common:format("Data~nYou have been kicked!~n~s~n", [Name]),
     error_logger:info_msg("Sending frame ~p to socket ~p~n", [Frame, Socket]),
     gen_tcp:send(Socket, Frame).
 
+%% ----------------------------------
+%% @doc
+%% This function aims to extract from a 2-elements tuple list (like the users
+%% list) a list containing only sockets.
+%% @end
+%% ----------------------------------
 get_sockets(Users)                   -> get_sockets(Users, []).
 get_sockets([User | Users], Sockets) ->
     {Current_Socket, _} = User,
     get_sockets(Users, [Current_Socket | Sockets]);
 get_sockets([], Sockets)             -> Sockets.
 
+%% ----------------------------------
+%% @doc
+%% Handle operation to send a data frame to a socket and log it.
+%% @end
+%% ----------------------------------
 message(From_Socket, Message, To_Socket) ->
     case common:socket_to_name(From_Socket) of
         {ok, From_Name} ->
@@ -189,6 +255,11 @@ message(From_Socket, Message, To_Socket) ->
                                    From_Socket])
     end.
 
+%% ----------------------------------
+%% @doc
+%% Handle operation to broadcast a data frame to a users list and log it.
+%% @end
+%% ----------------------------------
 broadcast(From_Socket, Message, Users) ->
     Sockets = get_sockets(Users),
     case common:socket_to_name(From_Socket) of
@@ -205,10 +276,22 @@ broadcast(From_Socket, Message, Users) ->
                                    "to string", [Message, From_Socket])
     end.
 
+%% ----------------------------------
+%% @doc
+%% External entry point to kick a user from server by name. It should be
+%% called by chat_client_ui.
+%% @end
+%% ----------------------------------
 kick(Name) ->
     server_pid ! {kick, Name},
     ok.
 
+%% ----------------------------------
+%% @doc
+%% Listening loop to handle clients connections. If a connection is successful
+%% a listen_user_socket loop is ``instantiated''.
+%% @end
+%% ----------------------------------
 user_connect(ListeningSocket) ->
     {ok, Socket} = gen_tcp:accept(ListeningSocket),
     spawn(fun() -> user_connect(ListeningSocket) end),
@@ -223,6 +306,11 @@ user_connect(ListeningSocket) ->
             error_logger:error_msg("Error: ~p~n", [Error])
     end.
 
+%% ----------------------------------
+%% @doc
+%% frame_factory is a kind of finished states machine to parse received frames
+%% @end
+%% ----------------------------------
 frame_factory(Socket) ->
     receive
         "Data" ->
@@ -256,6 +344,13 @@ frame_factory(Socket, data, Message) ->
             frame_factory(Socket)
     end.     
 
+%% ----------------------------------
+%% @doc
+%% Listening loop for client-side reception frames. It should be called only
+%% with a gen_tcp socket and a string name argument. It will itself
+%% ``instanciate'' a frame_factory.
+%% @end
+%% ----------------------------------
 listen_user_socket(Socket, Name) ->
     Frame_Factory = spawn(fun() -> frame_factory(Socket) end),
     listen_user_socket(Frame_Factory, Socket, Name).
