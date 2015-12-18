@@ -116,7 +116,7 @@ loop(State) ->
       end,
       wxFrame:setStatusText(Frame,"Status: Finished."),
       loop(State);
-  %% the Send button is clicked
+  %% the Kick button is clicked
     #wx{id = 4, event = #wxCommand{type = command_button_clicked}} ->
       wxFrame:setStatusText(Frame,"Status: Kicking..."),
       ToNameindex = wxListBox:getSelection(Listboxwg),
