@@ -227,6 +227,8 @@ loop(State) ->
   %% Handle click on the Disconnect submenu item
     #wx{id = ?wxID_CLOSE, event = #wxCommand{type = command_menu_selected}} ->
       wxFrame:setStatusText(Frame,"Status: Quitting..."),
+      wxListBox:clear(Listboxwg),
+      wxListBox:append(Listboxwg,""),
       chat_client:disconnect(),
       wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ "You disconnected.\n"),
       wxFrame:setStatusText(Frame,"Status: Disconnected."),
