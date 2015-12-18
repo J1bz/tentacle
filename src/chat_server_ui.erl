@@ -5,15 +5,14 @@
 %%% @end
 %%% Created : 29. oct. 2015 09:27
 %%%-------------------------------------------------------------------
--module(chat_client_ui).
+-module(chat_server_ui).
 
 %% API
 -include_lib("wx/include/wx.hrl").
+
+-export([start/0]).
 -define(PORT,13).
--define(ADDRESS,"127.0.0.1").
 
-
--export([start/0, notify_data/2,notify_absence/1,notify_presence/1]).
 
 start()->
   register(ui_pid, spawn(fun()->
@@ -29,7 +28,7 @@ create_window(Wx)->
 
   Parent = wxFrame:new(Wx,
     -1,
-    "Chat client",
+    "Chat server",
     [{size, {500, 400}}]),
 
   %% Create panel
@@ -43,10 +42,6 @@ create_window(Wx)->
   %% create and add the status bar
   wxFrame:createStatusBar(Parent),
 
-  %% Create the chat text widget
-  Outputtextwg = wxTextCtrl:new(Panel,1, [{value, ""}, {size, {300, 250}},{style,?wxTE_MULTILINE}]),
-  wxTextCtrl:setEditable(Outputtextwg,true),
-
   %% Create the connected users list widget
   ConnectedUsers = [],
   Listboxwg = wxListBox:new(Panel, 2, [{size, {150,220}},
@@ -54,11 +49,8 @@ create_window(Wx)->
     {style, ?wxLB_SINGLE}]),
   wxListBox:setToolTip(Listboxwg, "List of connected users"),
 
-  %% Create the chat text input widget
-  Sendtextwg = wxTextCtrl:new(Panel,3, [{value, "Enter text here"}, {size, {300, 20}}]),
-
   %% Create the send button widget
-  Sendbutton = wxButton:new(Panel, 4, [{label, "&Send"}]),
+  Kickbutton = wxButton:new(Panel, 4, [{label, "&Kick"}]),
 
   %% Create the exit button widget
   Exitbutton = wxButton:new(Panel, ?wxID_EXIT, [{label, "E&xit"}]),
@@ -73,17 +65,12 @@ create_window(Wx)->
 
   %% Add sizers and widgets
   wxSizer:addSpacer(MainSizer, 5),
-  wxSizer:add(ChatSizer, Outputtextwg, []),
-  wxSizer:addSpacer(ChatSizer, 10),
   wxSizer:add(ListBoxSizer, Listboxwg,[]),
   wxSizer:add(ChatSizer,ListBoxSizer,[]),
   wxSizer:add(MainSizer,ChatSizer,[]),
   wxSizer:addSpacer(MainSizer, 10),
 
-  wxSizer:add(MainSizer, Sendtextwg, []),
-
-  wxSizer:addSpacer(MainSizer, 5),
-  wxSizer:add(ButtonSizer, Sendbutton, []),
+  wxSizer:add(ButtonSizer, Kickbutton, []),
 
   wxSizer:addSpacer(ButtonSizer, 5),
   wxSizer:add(ButtonSizer, Exitbutton, []),
@@ -104,74 +91,38 @@ create_window(Wx)->
   %% Set events
   wxFrame:connect(Parent, close_window),
   wxFrame:connect(Parent, command_button_clicked),
-  wxFrame:connect(Sendtextwg, set_focus),
   wxFrame:connect(Parent, command_menu_selected),
 
   wxFrame:show(Parent),
 
-  {Parent, Outputtextwg, Sendtextwg, Listboxwg}.
+  {Parent, Listboxwg}.
 
 
 loop(State) ->
-  {Frame, Outputtextwg, Sendtextwg, Listboxwg} = State,
+  {Frame, Listboxwg} = State,
 
   receive
-    {message, Message, Name} ->
-      wxFrame:setStatusText(Frame,"Status: Receiving status..."),
-      Sendtextval = Name ++ ": " ++ Message ++ "\n",
-      wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ Sendtextval),
-      wxFrame:setStatusText(Frame,"Status: Finished."),
-      loop(State);
-    {presence,Name} ->
-      wxFrame:setStatusText(Frame,"Status: Receiving status..."),
-      wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ Name ++ " connected.\n"),
-      wxListBox:append(Listboxwg,Name),
-      wxFrame:setStatusText(Frame,"Status: Finished."),
-      loop(State);
-    {absence,Name} ->
-      wxFrame:setStatusText(Frame,"Status: Receiving status..."),
-      IndexOfName = wxListBox:findString(Listboxwg,Name),
-      if IndexOfName > -1 ->
-        wxListBox:delete(Listboxwg,IndexOfName),
-        wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ Name ++ " disconnected.\n");
-        true -> error_logger:error_msg("Unknown client name tried to disconnect from UI")
-      end,
-      wxFrame:setStatusText(Frame,"Status: Finished."),
-      loop(State);
   %% the Send button is clicked
     #wx{id = 4, event = #wxCommand{type = command_button_clicked}} ->
-      wxFrame:setStatusText(Frame,"Status: Sending..."),
-      Sendtextval = wxTextCtrl:getValue(Sendtextwg),
+      wxFrame:setStatusText(Frame,"Status: Kicking..."),
       ToNameindex = wxListBox:getSelection(Listboxwg),
-      if ToNameindex =< 0 ->
-        chat_client:send(Sendtextval);
+      if ok;
         ToNameindex > 0 ->
-          chat_client:send(Sendtextval,wxListBox:getStringSelection(Listboxwg));
+          UserName = wxListBox:getStringSelection(Listboxwg);
+        %%TODO Add kick command
         true ->
-          chat_client:send(Sendtextval)
+          ok
       end,
-      wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ "You: " ++ Sendtextval ++ "\n"),
-      wxFrame:setStatusText(Frame,"Status: Message sent."),
-      wxTextCtrl:clear(Sendtextwg),
-      wxTextCtrl:setFocus(Sendtextwg),
-      loop(State);
-  %% the send text control is focused
-    #wx{id = 3, event = #wxFocus{type = set_focus}} ->
-      Sendtextval = wxTextCtrl:getValue(Sendtextwg),
-      if Sendtextval =:= "Enter text here" ->
-        wxTextCtrl:clear(Sendtextwg);
-        true -> wxTextCtrl:setFocus(Sendtextwg)
-      end,
+      wxFrame:setStatusText(Frame,"Status: User kicked."),
       loop(State);
   %% The connect menu item is clicked
     #wx{id = ?wxID_OPEN, event = #wxCommand{type = command_menu_selected}} ->
-      chat_client:start(?ADDRESS,?PORT),
+      chat_server:start(?PORT),
       loop(State);
   %% The disconnect menu item is clicked
     #wx{id = ?wxID_CLOSE, event = #wxCommand{type = command_menu_selected}} ->
       wxFrame:setStatusText(Frame,"Status: Quitting..."),
-      chat_client:disconnect(),
-      wxTextCtrl:setValue(Outputtextwg, wxTextCtrl:getValue(Outputtextwg) ++ "You disconnected.\n"),
+      %%TODO Add disconnect command from server
       wxFrame:setStatusText(Frame,"Status: Disconnected."),
       loop(State);
   %% The exit button is clicked
@@ -182,24 +133,9 @@ loop(State) ->
   %% Window Close Event
     #wx{event=#wxClose{}} ->
       error_logger:info_msg("~p Closing window ~n",[self()]),
-      %%chat_client:disconnect(),
       wxWindow:destroy(Frame),
       ok;
   %% default handling
     _ ->
       loop(State)
   end.
-
-
-
-notify_data(Message, Name) ->
-  ui_pid ! {message,Message, Name},
-  ok.
-
-notify_presence(Name) ->
-  ui_pid ! {presence,Name},
-  ok.
-
-notify_absence(Name) ->
-  ui_pid ! {absence, Name},
-  ok.
