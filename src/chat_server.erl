@@ -156,7 +156,8 @@ rm_user(Socket, Users) ->
                        New_Users),
             error_logger:info_msg("Disconnect operation for user ~p "
                                   "successfully completed~n", [Name]),
-            chat_server_ui:notify_absence(Name);
+            chat_server_ui:notify_absence(Name),
+            New_Users;
         false ->
             error_logger:error_msg("Socket ~p wanted to disconnect from "
                                    "server, but it is not in users list~n",
